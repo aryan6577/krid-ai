@@ -98,7 +98,8 @@ keeping each player's source event idempotent. The streak service routes cover:
 Activity Events are the only write path for streak changes. Non-qualifying completions are
 discarded without an event. Qualifying completions are stored with the player's timezone-local
 calendar date, then the service applies the single daily increment rule and updates
-`streak_records` without ever decreasing `longest_streak`. Activity Event writes are
+`streak_records`. Corrections that remove a qualifying event recalculate both current and
+longest streak from the remaining dates. Activity Event writes are
 idempotent per player/source type/source id, so retried Exercise/Tutorial/Match completion
 events reuse the existing event.
 
@@ -113,6 +114,12 @@ supported exercise catalog entries. The deterministic Exercise Mode routes cover
 Exercise evaluation consumes the frozen `krid.cv.pose.v1` CV contract, stores detected output
 separately from user corrections, and creates Activity Events only by calling the unified
 streak service when a session is complete with sufficient detection quality.
+For an exercise, completion means the configured rep/set or plank-hold target was met and
+all evaluated frames passed the CV quality gate. A target detected with limited quality
+requires an explicit user confirmation before the Activity Event is added. Incomplete
+sessions never add an event. The server's completion timestamp determines the calendar
+day in the player's saved timezone; multiple completed activities on that date add only
+one streak day. The current day remains open until it ends.
 The CV service remains independently deployable. `POST /api/cv/pose/frames` accepts bounded
 JPEG batches from authenticated players, sends them to `CV_SERVICE_URL` with the private key,
 and returns the frozen `krid.cv.pose.v1` contract. Exercise/Tutorial evaluation stays in this

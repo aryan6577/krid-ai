@@ -81,6 +81,12 @@ export default function Train() {
                 : { reps: Number(targets.reps || 8), sets: Number(targets.sets || 1) },
             });
       setResult(data);
+      const streakText = data.evaluation.completion.completed
+        ? streakMessage(data.activityEvent, mode === "exercise" ? "Exercise" : "Drill")
+        : data.evaluation.completion.targetMet && data.evaluation.completion.manualConfirmationRequired
+          ? "Target reached, but camera quality was limited. Confirm completion manually below if you finished it; today has not counted yet."
+          : "Session saved, but the target was not completed. It does not count toward today's streak.";
+      setMessage(streakText);
       if (mode === "tutorial") {
         setRecentTutorials((items) => [data.session, ...items.filter((item) => item.id !== data.session.id)].slice(0, 6));
       } else {
@@ -88,7 +94,7 @@ export default function Train() {
       }
       pushNotification({
         type: mode,
-        text: `${mode === "tutorial" ? data.session.tutorial.drillName : data.session.exercise.name} evaluated: ${data.evaluation.completion.percentage}% of target.`,
+        text: streakText,
       });
     } catch (err) {
       setError(err.message || "Could not evaluate this CV output.");
@@ -137,7 +143,7 @@ export default function Train() {
       } else {
         setRecent((items) => items.map((item) => (item.id === sessionId ? data.session : item)));
       }
-      setMessage("Session correction saved. Original detected completion is still preserved.");
+      setMessage("Session marked incomplete. Streak credit was recalculated; another completed activity may still count for that day.");
     } catch (err) {
       setMessage(err.message || "Could not save correction.");
     }
@@ -160,7 +166,7 @@ export default function Train() {
       } else {
         setRecent((items) => items.map((item) => (item.id === sessionId ? data.session : item)));
       }
-      setMessage("Manual completion saved and sent through the Activity Event service.");
+      setMessage(streakMessage(data.activityEvent, mode === "exercise" ? "Exercise" : "Drill"));
     } catch (err) {
       setMessage(err.message || "Could not confirm completion.");
     }
@@ -169,6 +175,7 @@ export default function Train() {
   return (
     <div>
       <SectionHeading eyebrow="Train" title={mode === "tutorial" ? "Practise a sport drill" : "Train with your camera"} />
+      <p className="text-sm text-ink-soft mb-5">{mode === "exercise" ? "Finish one exercise target" : "Complete the drill checkpoints"} with reliable camera tracking to count today toward your streak. Limited-quality results need your explicit completion confirmation. More activity today still counts as one streak day.</p>
 
       <div className="inline-flex bg-paper-dim rounded-full p-1 mb-5">
         {[
@@ -314,8 +321,8 @@ export default function Train() {
 
           <CameraCoach key={`${mode}:${mode === "exercise" ? exerciseName : tutorialKey}`} token={session.accessToken} cameraView={mode === "exercise" ? selectedExercise?.cameraView : selectedTutorial?.cameraView} exercise={mode === "exercise" ? selectedExercise : null} targets={targets} onPose={evaluate} busy={loading || !(mode === "exercise" ? selectedExercise : selectedTutorial)} />
           {loading && <p role="status" className="mt-3 flex items-center gap-2 text-sm text-turf"><Loader2 size={16} className="animate-spin" /> Saving session feedback…</p>}
-          {error && <p className="text-sm text-clay-deep bg-clay-light rounded-xl px-3 py-2 mt-4">{error}</p>}
-          {message && <p className="text-sm text-turf-deep bg-turf-light rounded-xl px-3 py-2 mt-4">{message}</p>}
+          {error && <p role="alert" className="text-sm text-clay-deep bg-clay-light rounded-xl px-3 py-2 mt-4">{error}</p>}
+          {message && <p role="status" className="text-sm text-turf-deep bg-turf-light rounded-xl px-3 py-2 mt-4">{message}</p>}
         </div>
 
         <div className="space-y-5">
@@ -459,6 +466,13 @@ function Metric({ label, value }) {
       <p className="scoreboard text-lg font-bold mt-1">{value}</p>
     </div>
   );
+}
+
+function streakMessage(event, activityName) {
+  const count = event?.streak?.currentStreak;
+  if (count == null) return `${activityName} completed. Open your activity calendar to confirm today's streak credit.`;
+  if (event.streakChanged) return `${activityName} completed. Today counts toward your streak: ${count} day${count === 1 ? "" : "s"}.`;
+  return `${activityName} completed. Today already counted, so your streak remains ${count} day${count === 1 ? "" : "s"}.`;
 }
 
 function Field({ label, children }) {

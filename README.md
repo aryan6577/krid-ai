@@ -40,6 +40,10 @@ Camera access requires HTTPS or localhost. The browser asks permission only when
 
 Weather on the player home and venue pages uses [Open-Meteo](https://open-meteo.com/en/docs) forecasts for the player's saved coordinates or the selected venue's coordinates. For a player-entered area and city, the server resolves both parts with Open-Meteo geocoding and chooses an area match near the city. If only the city resolves, the widget labels the forecast approximate. Missing measurements and provider outages show an unavailable state; cached weather is labelled stale.
 
+### Daily streak rule
+
+One completed exercise earns one streak day in the player's saved timezone. Automatic completion requires reaching the selected rep/set or plank-hold target with sufficient camera quality throughout the analysed session. A target detected with limited quality can count only after the player explicitly confirms completion; incomplete sessions do not count. Additional qualifying exercises, tutorials or eligible match results on the same local date do not add another day. Complete a qualifying activity on consecutive dates to extend the streak. Today stays open until the day ends; if a full day is missed, the current streak resets. Correcting a completed session to incomplete removes its event and recalculates the streak from the remaining activity dates.
+
 The first YOLO run may need to download the configured pose weights. For offline deployments, set `KRID_CV_MODEL_PATH` to a local weights file. If the CV service is unavailable, training shows an error and does not invent an evaluation.
 
 The live counter follows the joint-angle and movement-stage approach in [Nicholas Renotte's MediaPipe gym tracker tutorial](https://www.youtube.com/watch?v=06TE_U21FK4). It uses the app's existing [Ultralytics 17-keypoint pose output](https://docs.ultralytics.com/tasks/pose/) and exercise thresholds, so no second pose model is needed in the browser.

@@ -982,7 +982,9 @@ async function buildStreakMonth(player, { year, month, timezone }) {
     const date = `${bounds.year}-${String(bounds.month).padStart(2, "0")}-${String(index + 1).padStart(2, "0")}`;
     const dayEvents = eventsByDate[date] || [];
     const qualifying = dayEvents.length > 0;
-    const state = qualifying ? (previousHadQualifying ? "streak" : "start") : "missed";
+    const state = qualifying
+      ? (previousHadQualifying ? "streak" : "start")
+      : date === todayKey ? "today_open" : date > todayKey ? "upcoming" : "missed";
     previousHadQualifying = qualifying;
     return {
       date,
@@ -1948,9 +1950,9 @@ app.get("/api/streaks/month", requireUser, async (req, res) => {
   try {
     const bundle = await requirePlayerBundle(req, res);
     if (!bundle) return;
-    const now = new Date();
-    const year = req.query.year || now.getUTCFullYear();
-    const month = req.query.month || now.getUTCMonth() + 1;
+    const localToday = localDateInTimezone(null, configuredTimezone(bundle.player));
+    const year = req.query.year || localToday.slice(0, 4);
+    const month = req.query.month || Number(localToday.slice(5, 7));
     const data = await buildStreakMonth(bundle.player, {
       year,
       month,
@@ -2019,7 +2021,9 @@ app.post("/api/exercise-sessions/evaluate", requireUser, async (req, res) => {
     });
     const exercise = await ensureExerciseCatalogEntry(evaluation.exercise.name);
     const startAt = body.startedAt || new Date().toISOString();
-    const endAt = body.completedAt || new Date().toISOString();
+    // Credit completion on the server's actual day, then convert to the
+    // player's saved timezone. Client timestamps cannot backdate a streak.
+    const endAt = new Date().toISOString();
     const completionStatus = evaluation.completion.completed
       ? "complete"
       : evaluation.completion.manualConfirmationRequired

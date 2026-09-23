@@ -13,12 +13,8 @@ export default function Performance() {
   useEffect(() => {
     let cancelled = false;
     async function loadStreakMonth() {
-      const now = new Date();
       try {
-        const data = await api.getStreakMonth(session.accessToken, {
-          year: now.getFullYear(),
-          month: now.getMonth() + 1,
-        });
+        const data = await api.getStreakMonth(session.accessToken);
         if (!cancelled) setStreakMonth(data);
       } catch {
         if (!cancelled) setStreakMonth(null);
@@ -57,6 +53,13 @@ export default function Performance() {
         </div>
       </div>
 
+      <section className="bg-gold-light rounded-2xl p-5 stitch-border mb-6" aria-labelledby="streak-rules-heading">
+        <h2 id="streak-rules-heading" className="font-display text-xl">How your streak counts</h2>
+        <p className="text-sm text-ink-soft mt-2">Complete one exercise target in a day with reliable camera tracking to earn that day. If the target was detected but tracking quality was limited, it counts only after you explicitly confirm completion. An unfinished exercise does not count.</p>
+        <p className="text-sm text-ink-soft mt-2">Each calendar day in your saved timezone counts once, even if you complete several exercises. A completed tutorial or eligible match can also earn the day's credit. Complete an activity on consecutive days to grow the streak; missing a full day resets the current run.</p>
+        {streakMonth && <p role="status" className="text-sm font-semibold text-turf-deep mt-3">Today ({streakMonth.today.date}, {streakMonth.timezone}): {streakMonth.today.eventCount ? `counted through ${streakMonth.today.types.join(", ")}` : "still open — complete an exercise to count it"}.</p>}
+      </section>
+
       <StreakCalendar data={streakMonth} />
 
       <div className="bg-white rounded-2xl p-6 stitch-border">
@@ -93,25 +96,28 @@ function StreakCalendar({ data }) {
       <div className="grid grid-cols-7 gap-2">
         {data.month.days.map((day) => {
           const future = day.date > today;
-          const state = day.qualifying ? "active" : future ? "upcoming" : "missed";
+          const state = day.qualifying ? "active" : day.date === today ? "today" : future ? "upcoming" : "missed";
           const Icon = state === "active" ? CheckCircle2 : state === "missed" ? XCircle : Circle;
-          const label = state === "active" ? `${day.eventCount} activity event${day.eventCount === 1 ? "" : "s"}` : state === "missed" ? "Missed" : "Upcoming";
+          const label = state === "active" ? `${day.eventCount} qualifying activity event${day.eventCount === 1 ? "" : "s"}; one streak day` : state === "today" ? "Today still open" : state === "missed" ? "Missed" : "Upcoming";
           const classes =
             state === "active"
               ? "bg-turf text-white"
-              : state === "missed"
-                ? "bg-clay-light text-clay-deep"
-                : "bg-paper-dim text-ink-soft";
+              : state === "today"
+                ? "bg-gold-light text-ink"
+                : state === "missed"
+                  ? "bg-clay-light text-clay-deep"
+                  : "bg-paper-dim text-ink-soft";
           return (
             <div
               key={day.date}
               title={`${day.date}: ${label}`}
+              role="img"
               aria-label={`${day.date}: ${label}`}
-              className={`min-h-[58px] rounded-xl p-2 flex flex-col items-center justify-center gap-1 ${classes}`}
+              className={`min-w-0 min-h-[50px] sm:min-h-[58px] rounded-xl p-1 sm:p-2 flex flex-col items-center justify-center gap-1 ${classes}`}
             >
               <span className="scoreboard text-sm font-bold">{Number(day.date.slice(-2))}</span>
               <span className="inline-flex items-center gap-1 text-[10px] font-semibold">
-                <Icon size={11} aria-hidden="true" /> {state === "active" ? "Done" : state === "missed" ? "Missed" : "Next"}
+                <Icon size={11} aria-hidden="true" /><span className="hidden sm:inline">{state === "active" ? "Done" : state === "today" ? "Open" : state === "missed" ? "Missed" : "Next"}</span>
               </span>
             </div>
           );
@@ -119,6 +125,7 @@ function StreakCalendar({ data }) {
       </div>
       <div className="flex flex-wrap gap-3 mt-4 text-xs text-ink-soft">
         <span className="inline-flex items-center gap-1"><CheckCircle2 size={13} className="text-turf" /> Activity logged</span>
+        <span className="inline-flex items-center gap-1"><Circle size={13} className="text-gold" /> Today still open</span>
         <span className="inline-flex items-center gap-1"><XCircle size={13} className="text-clay" /> Missed day</span>
         <span className="inline-flex items-center gap-1"><Circle size={13} /> Upcoming day</span>
       </div>
