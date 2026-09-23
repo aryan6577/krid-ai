@@ -10,7 +10,7 @@ const SPORTS = ["Football", "Badminton", "Tennis", "Basketball"];
 const SLOTS = ["", "Weekday Mornings", "Weekday Evenings", "Sunday Morning", "Weekend Evenings"];
 
 export default function Venues() {
-  const { session, currentPlayer, pushNotification, demoCatalog, demoLoading, demoError } = useApp();
+  const { session, currentPlayer, pushNotification } = useApp();
   const [sport, setSport] = useState(currentPlayer.sports[0] || "Football");
   const [budget, setBudget] = useState(1500);
   const [location, setLocation] = useState("");
@@ -25,11 +25,13 @@ export default function Venues() {
   const [paymentMessage, setPaymentMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const sampleVenues = demoCatalog.venues.filter((venue) =>
-    venue.sport === sport && venue.pricePerHour <= budget &&
-    (!location || venue.location.toLowerCase().includes(location.toLowerCase())) &&
-    (!availability || venue.availability.includes(availability))
-  );
+  const [myBookings, setMyBookings] = useState([]);
+  const [bookingsError, setBookingsError] = useState("");
+
+  const loadMyBookings = async () => {
+    try { const data = await api.getMyBookings(session.accessToken); setMyBookings(data.bookings || []); setBookingsError(""); }
+    catch (err) { setBookingsError(err.message || "Could not load your bookings."); }
+  };
 
   const loadVenues = async () => {
     setLoading(true);
@@ -52,6 +54,8 @@ export default function Venues() {
   useEffect(() => {
     if (session.accessToken) loadVenues();
   }, [session.accessToken, sport, budget, location, availability]);
+
+  useEffect(() => { if (session.accessToken) loadMyBookings(); }, [session.accessToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,6 +127,14 @@ export default function Venues() {
     setPayStep("processing");
     setPaymentMessage("");
     try {
+      if (booking.demo) {
+        const data = pending || await createPendingBooking();
+        setPending(data);
+        setPaymentMessage(data.message || "Demo booking saved. No real time or payment was reserved.");
+        setPayStep("demo");
+        await loadMyBookings();
+        return;
+      }
       const data = pending || (await createPendingBooking());
       const order = await api.createPaymentOrder(session.accessToken, data.booking.id);
       setPending({ ...data, payment: order.payment, booking: order.booking || data.booking });
@@ -192,8 +204,8 @@ export default function Venues() {
 
       <div className="bg-white rounded-2xl p-5 stitch-border mb-6 grid lg:grid-cols-[1fr_180px_220px] gap-4 items-end">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-2">Location filter</p>
-          <input
+          <label htmlFor="venue-location-filter" className="block text-xs font-bold uppercase tracking-widest text-ink-soft mb-2">Location filter</label>
+          <input id="venue-location-filter"
             className="fld"
             placeholder="Area or city"
             value={location}
@@ -205,8 +217,8 @@ export default function Venues() {
           <input type="range" min="300" max="3000" step="50" value={budget} onChange={(e) => setBudget(Number(e.target.value))} className="w-full accent-turf" />
         </div>
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-2">Availability</p>
-          <select className="fld" value={availability} onChange={(e) => setAvailability(e.target.value)}>
+          <label htmlFor="venue-availability-filter" className="block text-xs font-bold uppercase tracking-widest text-ink-soft mb-2">Availability</label>
+          <select id="venue-availability-filter" className="fld" value={availability} onChange={(e) => setAvailability(e.target.value)}>
             {SLOTS.map((slot) => <option key={slot} value={slot}>{slot || "Any slot"}</option>)}
           </select>
         </div>
@@ -228,7 +240,7 @@ export default function Venues() {
             <div key={venue.id} className="bg-white rounded-2xl p-5 stitch-border">
               <div className="flex items-center justify-between mb-3">
                 <Badge tone={venue.bestMatch ? "turf" : "neutral"}>{venue.bestMatch ? "Best match" : `${venue.score}% fit`}</Badge>
-                <Badge tone="gold">{venue.score}% fit</Badge>
+                {venue.demo ? <Badge tone="gold">Demo venue</Badge> : <Badge tone="gold">{venue.score}% fit</Badge>}
               </div>
               <p className="font-display text-xl tracking-wide">{venue.name}</p>
               <p className="text-sm text-ink-soft flex items-center gap-1.5 mt-1">
@@ -240,6 +252,7 @@ export default function Venues() {
               <p className="text-sm text-ink-soft flex items-center gap-1.5 mt-1">
                 <IndianRupee size={14} /> {venue.pricePerHour}/hr
               </p>
+              {venue.demo && <p className="text-xs text-ink-soft mt-2">Illustrative price and slots. You can save a demo booking; no real venue time or payment is reserved.</p>}
               <div className="flex flex-wrap gap-1.5 my-3">
                 {venue.facilities.map((facility) => <Badge key={facility} tone="neutral">{facility}</Badge>)}
               </div>
@@ -250,17 +263,13 @@ export default function Venues() {
                   </p>
                 ))}
               </div>
-              <PrimaryButton className="w-full" onClick={() => startBooking(venue)}>Book & pay</PrimaryButton>
+              <PrimaryButton className="w-full" onClick={() => startBooking(venue)}>{venue.demo ? "Choose demo venue" : "Book & pay"}</PrimaryButton>
             </div>
           ))}
         </div>
       )}
 
-      <section className="mt-8" aria-labelledby="sample-venues-heading">
-        <h2 id="sample-venues-heading" className="font-display text-xl mb-2">Example venues</h2>
-        <p className="text-xs text-ink-soft mb-3">Fictional venues linked to the sample organisations. Prices and availability are illustrative; these cannot be booked.</p>
-        {demoLoading ? <p role="status" className="text-sm text-ink-soft">Loading examples…</p> : demoError ? <p role="status" className="text-sm text-clay-deep">Examples unavailable: {demoError}</p> : sampleVenues.length === 0 ? <p className="text-sm text-ink-soft">No examples fit these filters. Try another sport, area, slot or budget.</p> : <div className="grid sm:grid-cols-2 gap-3">{sampleVenues.map((venue) => <article key={venue.id} className="bg-white rounded-xl p-4 stitch-border"><Badge tone="gold">Sample</Badge><h3 className="font-semibold mt-2">{venue.name}</h3><p className="text-xs text-ink-soft">{venue.orgName}</p><p className="text-sm text-ink-soft">{venue.sport} · {venue.location} · ₹{venue.pricePerHour}/hour</p><p className="text-xs text-ink-soft">{venue.facilities.join(" · ")}</p></article>)}</div>}
-      </section>
+      <section className="mt-8" aria-labelledby="my-bookings-heading"><h2 id="my-bookings-heading" className="font-display text-xl mb-2">Your venue choices</h2>{bookingsError && <p role="status" className="text-sm text-clay-deep mb-2">{bookingsError}</p>}{myBookings.length === 0 ? <p className="text-sm text-ink-soft">No venue bookings saved yet.</p> : <div className="grid sm:grid-cols-2 gap-3">{myBookings.map((item) => <article key={item.id} className="bg-white rounded-xl p-4 stitch-border"><Badge tone={item.demo ? "gold" : item.status === "confirmed" ? "turf" : "neutral"}>{item.demo ? "Demo booking" : item.status}</Badge><h3 className="font-semibold mt-2">{item.venue?.name || item.venueId}</h3><p className="text-sm text-ink-soft">{item.slot}</p>{item.demo && <p className="text-xs text-ink-soft mt-1">Saved example only. No real time or payment reserved.</p>}</article>)}</div>}</section>
 
       <Modal open={!!booking} onClose={() => setBooking(null)} title="Confirm booking">
         {booking && payStep === "review" && (
@@ -280,9 +289,9 @@ export default function Venues() {
               </select>
             </div>
             <p className="text-xs text-ink-soft">
-              Payment uses Razorpay test mode. The booking stays pending until the server verifies Razorpay's signed response.
+              {booking.demo ? "This saves a demo booking only. No real venue time is held and no payment is taken." : "Payment uses Razorpay test mode. The booking stays pending until the server verifies Razorpay's signed response."}
             </p>
-            <PrimaryButton disabled={!selectedSlot} className="w-full" onClick={pay}>Pay Rs {booking.pricePerHour} with Razorpay test mode</PrimaryButton>
+            <PrimaryButton disabled={!selectedSlot} className="w-full" onClick={pay}>{booking.demo ? "Save demo booking" : `Pay Rs ${booking.pricePerHour} with Razorpay test mode`}</PrimaryButton>
           </div>
         )}
         {booking && payStep === "processing" && (
@@ -291,6 +300,7 @@ export default function Venues() {
             <p className="text-sm">Creating a server-side Razorpay order...</p>
           </div>
         )}
+        {booking && payStep === "demo" && pending?.booking && <div className="py-6 flex flex-col items-center gap-3 text-center"><CheckCircle2 className="text-turf" size={40} /><p className="font-display text-xl tracking-wide">Demo booking saved</p><p className="text-sm text-ink-soft">{pending.booking.venue?.name || booking.name} · {pending.booking.slot}</p><p role="status" className="text-xs text-ink-soft bg-paper-dim rounded-xl p-3">{paymentMessage}</p><GhostButton onClick={() => setBooking(null)}>Done</GhostButton></div>}
         {booking && payStep === "unavailable" && pending?.booking && (
           <div className="py-6 flex flex-col items-center gap-3 text-center">
             <p className="font-display text-xl tracking-wide">Booking pending</p>

@@ -22,6 +22,7 @@ import { bookingIdempotencyKey, createOnce } from "./services/idempotencyService
 import { validateOpportunity, validateArticle, validateApplication } from "./services/careerValidationService.js";
 import { calculateStreakFromDates } from "./services/streakMath.js";
 import { buildDemoCatalog } from "./services/demoCatalogService.js";
+import { bookingPlanForVenue, connectionStatusForTarget, demoTeammateProblem } from "./services/demoFlowService.js";
 
 const app = express();
 app.use(cors());
@@ -202,6 +203,7 @@ function playerToAppProfile(row) {
     rating: row.rating,
     streak: { current: row.streak, longest: row.streak },
     avatar: initials(row.name),
+    demo: Boolean(row.is_demo),
   };
 }
 
@@ -217,6 +219,7 @@ function organisationToAppProfile(row) {
     verification: row.verification_status,
     verificationStatus: row.verification_status,
     avatar: initials(row.name),
+    demo: Boolean(row.is_demo),
   };
 }
 
@@ -441,12 +444,14 @@ function normalizeGame(row, participants = []) {
     date: date ? date.toISOString().slice(0, 10) : "",
     time: date ? date.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }) : "",
     venueId: row.venue_id,
-    venue: row.venue_id,
+    venue: row.venues?.name || row.venue_id,
+    venueName: row.venues?.name || null,
     capacity: row.capacity,
     participantCount: row.participant_count,
     participants,
     status: row.status,
     createdBy: row.created_by,
+    demo: Boolean(row.is_demo),
   };
 }
 
@@ -462,6 +467,7 @@ function normalizeVenue(row, scoreData = {}) {
     id: row.venue_id,
     name: row.name || `Venue ${String(row.venue_id).slice(0, 8)}`,
     organisationId: row.organisation_id,
+    organisationName: row.organisations?.name || null,
     location: typeof row.location === "string" ? row.location : row.location?.label || "",
     locationRaw: row.location,
     supportedSports: row.supported_sports || [],
@@ -469,6 +475,7 @@ function normalizeVenue(row, scoreData = {}) {
     pricePerHour: Number(row.price_per_hour ?? row.price ?? 0),
     facilities: Array.isArray(row.facilities) ? row.facilities : row.facilities?.items || [],
     availability,
+    demo: Boolean(row.is_demo),
     ...scoreData,
   };
 }
@@ -552,14 +559,14 @@ async function buildMatchCandidatesForPlayer(player, sport) {
   const hiddenCandidateIds = new Set(actions.map((action) => action.candidate_player_id));
   const connections = [...outboundConnections, ...inboundConnections];
   return players
-    .filter((candidate) => !hiddenCandidateIds.has(candidate.player_id))
+    .filter((candidate) => candidate.sports?.includes(sport) && !hiddenCandidateIds.has(candidate.player_id))
     .map((candidate) => scoreCandidate(player, candidate, sport, connectionStatusFor(connections, playerId, candidate.player_id)))
     .sort((a, b) => b.score - a.score);
 }
 
 async function discoverVenuesForPlayer(player, filters = {}) {
   const { sport, location, maxPrice, availability } = filters;
-  let path = "/venues?order=venue_id.asc";
+  let path = "/venues?select=*,organisations(name)&order=venue_id.asc";
   if (sport) path += `&supported_sports=cs.{${encodeFilterValue(sport)}}`;
   const rows = await supabaseDb(path);
   const filtered = rows.filter((venue) => {
@@ -590,6 +597,23 @@ async function createGameForPlayer(player, { sport, dateTime, venueId, capacity 
     error.status = 400;
     throw error;
   }
+  const venueRows = await supabaseDb(`/venues?venue_id=eq.${encodeFilterValue(venueId)}&limit=1`);
+  const venue = venueRows?.[0];
+  if (!venue || !venue.supported_sports?.includes(sport)) {
+    const error = new Error("Choose a venue that supports this sport.");
+    error.status = 400;
+    throw error;
+  }
+  if (!Number.isFinite(Date.parse(dateTime)) || Date.parse(dateTime) <= Date.now()) {
+    const error = new Error("Choose a future game date and time.");
+    error.status = 400;
+    throw error;
+  }
+  if (!Number.isInteger(Number(capacity)) || Number(capacity) < 2 || Number(capacity) > 22) {
+    const error = new Error("Capacity must be between 2 and 22 players.");
+    error.status = 400;
+    throw error;
+  }
   const gameRows = await supabaseDb("/games?select=*", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -602,6 +626,7 @@ async function createGameForPlayer(player, { sport, dateTime, venueId, capacity 
       participants: [],
       teams: {},
       status: "Open",
+      is_demo: Boolean(venue.is_demo),
     },
   });
   const game = gameRows?.[0];
@@ -609,7 +634,7 @@ async function createGameForPlayer(player, { sport, dateTime, venueId, capacity 
     method: "POST",
     body: { game_id: game.game_id, player_id: player.player_id, status: "confirmed" },
   });
-  const freshRows = await supabaseDb(`/games?game_id=eq.${encodeFilterValue(game.game_id)}&limit=1`);
+  const freshRows = await supabaseDb(`/games?select=*,venues(name)&game_id=eq.${encodeFilterValue(game.game_id)}&limit=1`);
   return { ...normalizeGame(freshRows?.[0] || game), joined: true };
 }
 
@@ -647,6 +672,7 @@ function normalizeBooking(row, venue, player) {
     status: row.status,
     createdAt: row.created_at,
     confirmedAt: row.confirmed_at,
+    demo: Boolean(row.is_demo),
   };
 }
 
@@ -1668,6 +1694,27 @@ app.get("/api/matchmaking/candidates", requireUser, async (req, res) => {
   }
 });
 
+async function connectPlayers(requesterId, targetPlayer) {
+  const targetId = targetPlayer.player_id;
+  const [outbound, inbound] = await Promise.all([
+    supabaseDb(`/player_connections?requester_player_id=eq.${encodeFilterValue(requesterId)}&addressee_player_id=eq.${encodeFilterValue(targetId)}&limit=1`),
+    supabaseDb(`/player_connections?requester_player_id=eq.${encodeFilterValue(targetId)}&addressee_player_id=eq.${encodeFilterValue(requesterId)}&limit=1`),
+  ]);
+  if (outbound[0] || inbound[0]) return outbound[0] || inbound[0];
+  const rows = await supabaseDb("/player_connections?on_conflict=requester_player_id,addressee_player_id&select=*", {
+    method: "POST",
+    headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+    body: {
+      requester_player_id: requesterId,
+      addressee_player_id: targetId,
+      status: connectionStatusForTarget(targetPlayer),
+    },
+  });
+  if (rows?.[0]) return rows[0];
+  const fresh = await supabaseDb(`/player_connections?requester_player_id=eq.${encodeFilterValue(requesterId)}&addressee_player_id=eq.${encodeFilterValue(targetId)}&limit=1`);
+  return fresh[0] || null;
+}
+
 app.post("/api/matchmaking/candidates/:candidateId/action", requireUser, async (req, res) => {
   try {
     const bundle = await requirePlayerBundle(req, res);
@@ -1678,6 +1725,13 @@ app.post("/api/matchmaking/candidates/:candidateId/action", requireUser, async (
     }
     const sport = String(req.body?.sport || "").trim();
     if (!sport) return res.status(400).json({ error: "sport is required." });
+
+    const candidateRows = await supabaseDb(`/players?player_id=eq.${encodeFilterValue(req.params.candidateId)}&limit=1`);
+    const candidate = candidateRows?.[0];
+    if (!candidate || candidate.player_id === bundle.player.player_id || !candidate.sports?.includes(sport)) {
+      return res.status(400).json({ error: "Choose another player who lists this sport." });
+    }
+    const connection = action === "accepted" ? await connectPlayers(bundle.player.player_id, candidate) : null;
 
     const rows = await supabaseDb("/match_candidate_actions?on_conflict=player_id,candidate_player_id,sport&select=*", {
       method: "POST",
@@ -1691,7 +1745,7 @@ app.post("/api/matchmaking/candidates/:candidateId/action", requireUser, async (
         reason: String(req.body?.reason || ""),
       },
     });
-    res.status(201).json({ action: rows?.[0] });
+    res.status(201).json({ action: rows?.[0], connection, demoTeammate: Boolean(candidate.is_demo && connection?.status === "accepted") });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || "Could not save candidate action." });
   }
@@ -1732,22 +1786,10 @@ app.post("/api/friends/request", requireUser, async (req, res) => {
       return res.status(400).json({ error: "A different playerId is required." });
     }
 
-    const [outbound, inbound] = await Promise.all([
-      supabaseDb(`/player_connections?requester_player_id=eq.${encodeFilterValue(bundle.player.player_id)}&addressee_player_id=eq.${encodeFilterValue(targetPlayerId)}&limit=1`),
-      supabaseDb(`/player_connections?requester_player_id=eq.${encodeFilterValue(targetPlayerId)}&addressee_player_id=eq.${encodeFilterValue(bundle.player.player_id)}&limit=1`),
-    ]);
-    if (outbound[0] || inbound[0]) return res.status(409).json({ error: "A connection already exists." });
-
-    const rows = await supabaseDb("/player_connections?select=*", {
-      method: "POST",
-      headers: { Prefer: "return=representation" },
-      body: {
-        requester_player_id: bundle.player.player_id,
-        addressee_player_id: targetPlayerId,
-        status: "pending",
-      },
-    });
-    res.status(201).json({ connection: rows?.[0] });
+    const targetRows = await supabaseDb(`/players?player_id=eq.${encodeFilterValue(targetPlayerId)}&limit=1`);
+    if (!targetRows?.[0]) return res.status(404).json({ error: "Player not found." });
+    const connection = await connectPlayers(bundle.player.player_id, targetRows[0]);
+    res.status(201).json({ connection, demoTeammate: Boolean(targetRows[0].is_demo && connection?.status === "accepted") });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || "Could not send friend request." });
   }
@@ -1792,7 +1834,7 @@ app.get("/api/games", requireUser, async (req, res) => {
   try {
     const bundle = await requirePlayerBundle(req, res);
     if (!bundle) return;
-    const rows = await supabaseDb("/games?order=date_time.asc");
+    const rows = await supabaseDb("/games?select=*,venues(name)&order=date_time.asc");
     const joinedRows = await supabaseDb(`/game_participants?player_id=eq.${encodeFilterValue(bundle.player.player_id)}`);
     const joinedIds = new Set(joinedRows.map((row) => row.game_id));
     const games = rows.map((row) => ({ ...normalizeGame(row), joined: joinedIds.has(row.game_id) }));
@@ -1836,16 +1878,43 @@ app.post("/api/games/:gameId/join", requireUser, async (req, res) => {
       method: "POST",
       body: { game_id: req.params.gameId, player_id: bundle.player.player_id, status: "confirmed" },
     });
-    const freshRows = await supabaseDb(`/games?game_id=eq.${encodeFilterValue(req.params.gameId)}&limit=1`);
+    const freshRows = await supabaseDb(`/games?select=*,venues(name)&game_id=eq.${encodeFilterValue(req.params.gameId)}&limit=1`);
     res.json({ game: { ...normalizeGame(freshRows?.[0] || game), joined: true } });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || "Could not join game." });
   }
 });
 
+app.post("/api/games/:gameId/demo-teammates", requireUser, async (req, res) => {
+  try {
+    const bundle = await requirePlayerBundle(req, res);
+    if (!bundle) return;
+    const targetId = String(req.body?.playerId || "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId)) {
+      return res.status(400).json({ error: "Choose a demo teammate." });
+    }
+    const [games, targets] = await Promise.all([
+      supabaseDb(`/games?select=*,venues(name)&game_id=eq.${encodeFilterValue(req.params.gameId)}&limit=1`),
+      supabaseDb(`/players?player_id=eq.${encodeFilterValue(targetId)}&is_demo=eq.true&limit=1`),
+    ]);
+    const game = games?.[0];
+    const target = targets?.[0];
+    if (!game) return res.status(404).json({ error: "Game not found." });
+    const connections = await supabaseDb(`/player_connections?requester_player_id=eq.${encodeFilterValue(bundle.player.player_id)}&addressee_player_id=eq.${encodeFilterValue(targetId)}&status=eq.accepted&limit=1`);
+    const existing = await supabaseDb(`/game_participants?game_id=eq.${encodeFilterValue(game.game_id)}&player_id=eq.${encodeFilterValue(targetId)}&limit=1`);
+    const problem = demoTeammateProblem({ game, requesterId: bundle.player.player_id, target, connection: connections?.[0], alreadyJoined: Boolean(existing?.[0]) });
+    if (problem) return res.status(problem.status).json({ error: problem.message });
+    await supabaseDb("/game_participants", { method: "POST", body: { game_id: game.game_id, player_id: targetId, status: "confirmed" } });
+    const fresh = await supabaseDb(`/games?select=*,venues(name)&game_id=eq.${encodeFilterValue(game.game_id)}&limit=1`);
+    res.status(201).json({ game: normalizeGame(fresh?.[0] || game), message: "Demo teammate added to this example game. No real person was invited." });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || "Could not add demo teammate." });
+  }
+});
+
 app.get("/api/games/:gameId", requireUser, async (req, res) => {
   try {
-    const gameRows = await supabaseDb(`/games?game_id=eq.${encodeFilterValue(req.params.gameId)}&limit=1`);
+    const gameRows = await supabaseDb(`/games?select=*,venues(name)&game_id=eq.${encodeFilterValue(req.params.gameId)}&limit=1`);
     const game = gameRows?.[0];
     if (!game) return res.status(404).json({ error: "Game not found." });
     const participantRows = await supabaseDb(`/game_participants?game_id=eq.${encodeFilterValue(req.params.gameId)}&order=joined_at.asc`);
@@ -2554,6 +2623,17 @@ app.get("/api/career/applications/:id/cv", requireUser, async (req, res) => {
   } catch (err) { careerError(res, err); }
 });
 
+app.get("/api/bookings/mine", requireUser, async (req, res) => {
+  try {
+    const bundle = await requirePlayerBundle(req, res);
+    if (!bundle) return;
+    const rows = await supabaseDb(`/venue_bookings?select=*,venues(*)&player_id=eq.${encodeFilterValue(bundle.player.player_id)}&order=created_at.desc&limit=20`);
+    res.json({ bookings: rows.map((row) => normalizeBooking(row, row.venues)) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || "Could not load bookings." });
+  }
+});
+
 app.post("/api/bookings", requireUser, async (req, res) => {
   try {
     const bundle = await requirePlayerBundle(req, res);
@@ -2586,8 +2666,7 @@ app.post("/api/bookings", requireUser, async (req, res) => {
             player_id: bundle.player.player_id,
             slot,
             start_at: startAt || null,
-            amount: Number(venue.price_per_hour ?? venue.price ?? 0),
-            status: "pending",
+            ...bookingPlanForVenue(venue),
             idempotency_key: idempotencyKey,
           },
         });
@@ -2600,6 +2679,7 @@ app.post("/api/bookings", requireUser, async (req, res) => {
       payment: null,
       paymentStatus: "unpaid",
       idempotent: bookingResult.idempotent,
+      message: venue.is_demo ? "Demo booking saved. No real venue time was held and no payment was taken." : "Booking pending payment verification.",
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || "Could not create booking." });
@@ -2616,6 +2696,7 @@ app.post("/api/bookings/:bookingId/payment-order", requireUser, async (req, res)
     );
     const booking = bookingRows?.[0];
     if (!booking) return res.status(404).json({ error: "Booking not found." });
+    if (booking.is_demo) return res.status(409).json({ error: "Demo bookings do not use Razorpay or reserve real venue time." });
     if (booking.status === "confirmed") {
       const existingPaymentRows = await supabaseDb(`/sandbox_payments?booking_id=eq.${encodeFilterValue(bookingId)}&limit=1`);
       return res.json({

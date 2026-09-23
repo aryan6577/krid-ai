@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MessageSquare } from "lucide-react";
+import { Link } from "react-router-dom";
 import { SectionHeading, Badge, PrimaryButton, EmptyState } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import FriendChatModal from "../../components/FriendChatModal";
@@ -115,9 +116,7 @@ export default function Friends() {
               <div key={player.id} className="bg-white rounded-2xl p-4 stitch-border flex items-center justify-between">
                 <PlayerRow player={player} />
                 <div className="flex items-center gap-3">
-                  <button onClick={() => setChatWith(player)} className="flex items-center gap-1 text-xs font-semibold text-turf">
-                    <MessageSquare size={14} /> Message
-                  </button>
+                  {player.demo ? <Link to="/app/games" className="text-xs font-semibold text-turf underline">Plan demo game</Link> : <button onClick={() => setChatWith(player)} className="flex items-center gap-1 text-xs font-semibold text-turf"><MessageSquare size={14} /> Message</button>}
                   <button onClick={() => remove(player.id)} className="text-xs font-semibold text-clay">
                     Remove
                   </button>
@@ -154,7 +153,7 @@ function PlayerRow({ player }) {
         {player.avatar}
       </span>
       <div>
-        <p className="text-sm font-semibold">{player.name}</p>
+        <p className="text-sm font-semibold">{player.name} {player.demo && <Badge tone="gold">Demo teammate</Badge>}</p>
         <p className="text-xs text-ink-soft">{(player.sports || []).join(", ")}</p>
       </div>
     </div>

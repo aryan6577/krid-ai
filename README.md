@@ -17,7 +17,13 @@ The configured Supabase project currently has email auto-confirmation enabled. T
 
 ### Fictional demo catalog
 
-Apply `sportsync-backend/supabase/migrations/202609230002_demo_catalog.sql` and `202609230003_demo_catalog_alignment.sql` after the Career migration. They seed 24 fictional player profiles and 12 fictional organisations, each linked to a sample venue and career listing, plus 10 example games. The examples live in a separate read-only table and do not create Supabase Auth users, bookings, applications, activity, awards, or verified organisations. The web API serves the same catalog to player and organisation pages at `/api/demo/catalog`, and `/demo` offers a public read-only preview; sample cards cannot be joined, booked, or applied to. To update the fixture, edit `sportsync-backend/scripts/buildDemoCatalog.mjs`, run it with Node, then add a new additive migration for already deployed databases.
+Apply `sportsync-backend/supabase/migrations/202609230002_demo_catalog.sql`, `202609230003_demo_catalog_alignment.sql`, and `202609230004_interactive_demo_records.sql` after the Career migration. They seed 24 fictional player profiles, 12 fictional organisations, 12 venues, and 10 example games. The final migration copies interactive examples into the primary `players`, `organisations`, `venues`, `games`, and `game_participants` tables with `is_demo` and stable `demo_catalog_id` markers; existing records keep `is_demo=false`. It does not create Supabase Auth users, applications, activity, awards, or verified organisations. The separate catalog remains the source for the public `/demo` preview and non-interactive career examples.
+
+### Judge walkthrough with persisted demo records
+
+Create a Player account and complete onboarding with Football, Badminton, Tennis, or Basketball. In **Play → Matchmaking**, accept a clearly labelled demo player for the chosen sport. The accepted demo teammate appears in **Play → Friends** immediately; real player connections still require the other player to accept. In **Play → Games**, join a labelled example game or create a new game and choose a named demo venue from the database. On a game you created at a demo venue, add an accepted demo teammate from the game detail page. In **Play → Venues**, choose a demo venue and save an example booking; it appears under your saved choices. A demo booking does not hold actual venue time or take payment. Real venues retain the existing payment flow. Sample organisations and opportunity examples have no login credentials, and sample career listings cannot accept applications.
+
+To update the fixture, edit `sportsync-backend/scripts/buildDemoCatalog.mjs`, run it with Node, then add an additive migration for deployed databases. Keep demo records flagged and avoid using them as evidence of real player performance or venue availability.
 
 On Windows, run these commands in separate PowerShell terminals after installing dependencies:
 

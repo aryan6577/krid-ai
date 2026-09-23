@@ -48,6 +48,7 @@ export const api = {
   getGames: (token) => request("/api/games", { token }),
   createGame: (token, payload) => request("/api/games", { method: "POST", token, body: payload }),
   joinGame: (token, gameId) => request(`/api/games/${gameId}/join`, { method: "POST", token }),
+  addDemoTeammate: (token, gameId, playerId) => request(`/api/games/${gameId}/demo-teammates`, { method: "POST", token, body: { playerId } }),
   getGame: (token, gameId) => request(`/api/games/${gameId}`, { token }),
   balanceGameTeams: (token, gameId, payload) =>
     request(`/api/games/${gameId}/balance`, { method: "POST", token, body: payload }),
@@ -106,6 +107,7 @@ export const api = {
     return request(`/api/venues?${params.toString()}`, { token });
   },
   createBooking: (token, payload) => request("/api/bookings", { method: "POST", token, body: payload }),
+  getMyBookings: (token) => request("/api/bookings/mine", { token }),
   createPaymentOrder: (token, bookingId) =>
     request(`/api/bookings/${bookingId}/payment-order`, { method: "POST", token }),
   verifyRazorpayPayment: (token, payload) =>

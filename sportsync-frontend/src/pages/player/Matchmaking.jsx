@@ -7,7 +7,7 @@ import { api } from "../../lib/api";
 const SPORTS = ["Football", "Badminton", "Tennis", "Basketball"];
 
 export default function Matchmaking() {
-  const { currentPlayer, session, pushNotification, demoCatalog, demoLoading, demoError } = useApp();
+  const { currentPlayer, session, pushNotification } = useApp();
   const [sport, setSport] = useState(currentPlayer.sports[0] || SPORTS[0]);
   const [candidates, setCandidates] = useState([]);
   const [index, setIndex] = useState(0);
@@ -45,14 +45,14 @@ export default function Matchmaking() {
     setExitDir(action === "rejected" ? "left" : "right");
     setTimeout(async () => {
       try {
-        await api.saveMatchAction(session.accessToken, current.player.id, {
+        const result = await api.saveMatchAction(session.accessToken, current.player.id, {
           action,
           sport,
           score: current.score,
           reason: current.reasons.join(", "),
         });
         if (action === "accepted") {
-          pushNotification({ type: "match", text: `You accepted ${current.player.name} as a ${sport} match suggestion.` });
+          pushNotification({ type: "match", text: result.demoTeammate ? `${current.player.name} was added as a demo teammate. Create a game at a demo venue to play together.` : `Friend request sent to ${current.player.name}.` });
         }
         setLog((l) => [{ ...current, action: labelFor(action) }, ...l]);
         setIndex((i) => i + 1);
@@ -111,9 +111,7 @@ export default function Matchmaking() {
                 }`}
               >
                 <div className="flex items-center justify-between mb-4">
-                  <Badge tone={current.score >= 75 ? "turf" : current.score >= 50 ? "gold" : "neutral"}>
-                    {current.score}% match
-                  </Badge>
+                  <div className="flex items-center gap-2"><Badge tone={current.score >= 75 ? "turf" : current.score >= 50 ? "gold" : "neutral"}>{current.score}% match</Badge>{current.player.demo && <Badge tone="gold">Demo player</Badge>}</div>
                   <span className="scoreboard text-xs text-ink-soft">
                     {sport.toUpperCase()} · {current.distanceKm == null ? "DISTANCE N/A" : `${current.distanceKm.toFixed(1)} KM`}
                   </span>
@@ -145,12 +143,13 @@ export default function Matchmaking() {
                 <p className="text-[11px] leading-5 text-ink-soft bg-paper-dim rounded-xl px-3 py-2">
                   {current.explanation}
                 </p>
+                {current.player.demo && <p className="text-xs text-ink-soft mt-3">Fictional demo profile. Accepting adds a labelled demo teammate to Friends immediately; no real person is contacted.</p>}
               </div>
 
               <div className="flex items-center justify-center gap-4 mt-5">
-                <RoundBtn onClick={() => act("rejected")} tone="clay"><X size={22} /></RoundBtn>
-                <RoundBtn onClick={() => act("saved")} tone="gold" small><Bookmark size={17} /></RoundBtn>
-                <RoundBtn onClick={() => act("accepted")} tone="turf"><Heart size={22} /></RoundBtn>
+                <RoundBtn onClick={() => act("rejected")} tone="clay" ariaLabel="Pass on player"><X size={22} /></RoundBtn>
+                <RoundBtn onClick={() => act("saved")} tone="gold" small ariaLabel="Save player for later"><Bookmark size={17} /></RoundBtn>
+                <RoundBtn onClick={() => act("accepted")} tone="turf" ariaLabel={current.player.demo ? "Add demo teammate" : "Send friend request"}><Heart size={22} /></RoundBtn>
               </div>
               <p className="text-center text-xs text-ink-soft/70 mt-3">
                 {Math.max(0, candidates.length - index - 1)} more {sport} players in your area
@@ -185,11 +184,6 @@ export default function Matchmaking() {
           )}
         </div>
       </div>
-      <section className="mt-8" aria-labelledby="sample-players-heading">
-        <h2 id="sample-players-heading" className="font-display text-xl mb-2">Example player community</h2>
-        <p className="text-xs text-ink-soft mb-3">Fictional profiles for exploring the {sport} community. They are not matchmaking candidates and cannot receive requests. Ratings are illustrative.</p>
-        {demoLoading ? <p role="status" className="text-sm text-ink-soft">Loading examples…</p> : demoError ? <p role="status" className="text-sm text-clay-deep">Examples unavailable: {demoError}</p> : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{demoCatalog.players.filter((player) => player.sports.includes(sport)).map((player) => <article key={player.id} className="bg-white rounded-xl p-4 stitch-border"><Badge tone="gold">Sample</Badge><h3 className="font-semibold mt-2">{player.name}</h3><p className="text-xs text-ink-soft">{player.location} · {player.skill[sport]} · Illustrative rating {player.rating}</p></article>)}</div>}
-      </section>
     </div>
   );
 }
@@ -198,7 +192,7 @@ function labelFor(action) {
   return action === "accepted" ? "Accepted" : action === "saved" ? "Saved" : "Rejected";
 }
 
-function RoundBtn({ children, onClick, tone, small }) {
+function RoundBtn({ children, onClick, tone, small, ariaLabel }) {
   const tones = {
     clay: "bg-white border-2 border-clay text-clay hover:bg-clay hover:text-white",
     turf: "bg-white border-2 border-turf text-turf hover:bg-turf hover:text-white",
@@ -207,6 +201,7 @@ function RoundBtn({ children, onClick, tone, small }) {
   return (
     <button
       onClick={onClick}
+      aria-label={ariaLabel}
       className={`rounded-full flex items-center justify-center transition shadow-md ${small ? "w-11 h-11" : "w-16 h-16"} ${tones[tone]}`}
     >
       {children}

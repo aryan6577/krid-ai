@@ -8,7 +8,7 @@ import { api } from "../../lib/api";
 const SPORTS = ["Football", "Badminton", "Tennis", "Basketball"];
 
 export default function Games() {
-  const { session, demoCatalog, demoLoading, demoError } = useApp();
+  const { session } = useApp();
   const navigate = useNavigate();
   const [games, setGames] = useState([]);
   const [openCreate, setOpenCreate] = useState(false);
@@ -16,6 +16,9 @@ export default function Games() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [venueOptions, setVenueOptions] = useState([]);
+  const [venueLoading, setVenueLoading] = useState(false);
+  const [venueError, setVenueError] = useState("");
 
   const loadGames = async () => {
     setLoading(true);
@@ -33,6 +36,18 @@ export default function Games() {
   useEffect(() => {
     if (session.accessToken) loadGames();
   }, [session.accessToken]);
+
+  useEffect(() => {
+    if (!session.accessToken || !openCreate) return;
+    let active = true;
+    setVenueLoading(true);
+    setVenueError("");
+    api.discoverVenues(session.accessToken, { sport: form.sport })
+      .then((data) => { if (active) setVenueOptions(data.venues || []); })
+      .catch((err) => { if (active) setVenueError(err.message || "Could not load venues."); })
+      .finally(() => { if (active) setVenueLoading(false); });
+    return () => { active = false; };
+  }, [session.accessToken, openCreate, form.sport]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -92,15 +107,16 @@ export default function Games() {
               <div key={g.id} className="bg-white rounded-2xl p-5 stitch-border">
                 <div className="flex items-center justify-between mb-3">
                   <Badge tone="navy">{g.sport}</Badge>
-                  <Badge tone={full ? "clay" : "turf"}>{full ? "Full" : g.status}</Badge>
+                  <div className="flex gap-2"><Badge tone={full ? "clay" : "turf"}>{full ? "Full" : g.status}</Badge>{g.demo && <Badge tone="gold">Demo game</Badge>}</div>
                 </div>
                 <p className="font-display text-xl tracking-wide">{g.date} · {g.time}</p>
                 <p className="text-sm text-ink-soft flex items-center gap-1.5 mt-1">
-                  <MapPin size={14} /> Venue ref {g.venueId}
+                  <MapPin size={14} /> {g.venueName || `Venue ${g.venueId}`}
                 </p>
                 <p className="text-sm text-ink-soft flex items-center gap-1.5 mt-1">
                   <Users size={14} /> {g.participantCount}/{g.capacity} players
                 </p>
+                {g.demo && <p className="text-xs text-ink-soft mt-2">Example game at a demo venue. Joining is saved to your account; no real booking or payment is made.</p>}
                 <div className="flex items-center gap-3 mt-4">
                   <button onClick={() => navigate(`/app/games/${g.id}`)} className="text-sm font-semibold text-turf">
                     View details
@@ -118,12 +134,6 @@ export default function Games() {
         </div>
       )}
 
-      <section className="mt-8" aria-labelledby="sample-games-heading">
-        <h2 id="sample-games-heading" className="font-display text-xl mb-2">Example games</h2>
-        <p className="text-xs text-ink-soft mb-3">Fictional schedule linked to sample venues and players. These games cannot be joined and no activity counts toward a streak.</p>
-        {demoLoading ? <p role="status" className="text-sm text-ink-soft">Loading examples…</p> : demoError ? <p role="status" className="text-sm text-clay-deep">Examples unavailable: {demoError}</p> : <div className="grid sm:grid-cols-2 gap-3">{demoCatalog.games.map((game) => <article key={game.id} className="bg-white rounded-xl p-4 stitch-border"><Badge tone="gold">Sample</Badge><h3 className="font-semibold mt-2">{game.sport} · {game.date} · {game.time}</h3><p className="text-sm text-ink-soft">{game.venue} · {game.participants.length}/{game.capacity} example players</p></article>)}</div>}
-      </section>
-
       <Modal open={openCreate} onClose={() => setOpenCreate(false)} title="Create a game">
         <form onSubmit={submit} className="space-y-3">
           <div>
@@ -133,7 +143,7 @@ export default function Games() {
                 <button
                   type="button"
                   key={s}
-                  onClick={() => setForm({ ...form, sport: s })}
+                  onClick={() => setForm({ ...form, sport: s, venueId: "" })}
                   className={`px-3.5 py-1.5 rounded-full text-sm font-semibold border-2 ${
                     form.sport === s ? "bg-turf border-turf text-white" : "border-ink/15 text-ink-soft"
                   }`}
@@ -144,16 +154,10 @@ export default function Games() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <input required type="date" className="fld" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-            <input required type="time" className="fld" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
+            <div><label htmlFor="game-date" className="text-sm font-semibold">Date</label><input id="game-date" required type="date" min={new Date().toISOString().slice(0, 10)} className="fld" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></div>
+            <div><label htmlFor="game-time" className="text-sm font-semibold">Time</label><input id="game-time" required type="time" className="fld" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></div>
           </div>
-          <input
-            required
-            className="fld"
-            placeholder="Venue reference UUID"
-            value={form.venueId}
-            onChange={(e) => setForm({ ...form, venueId: e.target.value })}
-          />
+          <div><label htmlFor="game-venue" className="text-sm font-semibold">Venue</label><select id="game-venue" required className="fld" value={form.venueId} onChange={(e) => setForm({ ...form, venueId: e.target.value })}><option value="">Choose a venue</option>{venueOptions.map((venue) => <option key={venue.id} value={venue.id}>{venue.name} · {venue.location}{venue.demo ? " · Demo" : ""}</option>)}</select>{venueLoading && <p role="status" className="text-xs text-ink-soft mt-1">Loading venues…</p>}{venueError && <p role="alert" className="text-xs text-clay-deep mt-1">{venueError}</p>}{!venueLoading && !venueError && venueOptions.length === 0 && <p className="text-xs text-ink-soft mt-1">No venues for this sport yet. Try another sport.</p>}</div>
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-2">Player capacity</p>
             <input
