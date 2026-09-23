@@ -1384,6 +1384,20 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+app.get("/api/health/cv", async (req, res) => {
+  try {
+    const response = await fetch(`${CV_SERVICE_URL}/healthz`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) throw new Error(`CV health returned ${response.status}`);
+    const data = await response.json();
+    if (data?.status !== "ok") throw new Error("CV health returned an invalid status");
+    res.json({ ok: true, service: "cv", schemaVersion: data.schemaVersion });
+  } catch {
+    res.status(503).json({ ok: false, service: "cv", error: "Pose service is unavailable." });
+  }
+});
+
 app.post("/api/auth/register", async (req, res) => {
   try {
     if (!requireSupabaseConfig(res)) return;
