@@ -31,6 +31,7 @@ const sportForOrg = [
   "Football", "Badminton", "Tennis", "Basketball", "Badminton", "Basketball",
   "Tennis", "Football", "Football", "Tennis", "Basketball", "Badminton",
 ];
+const orgAreaIndices = [0, 1, 3, 5, 4, 2, 3, 0, 1, 7, 9, 11];
 const titleForSport = {
   Football: "Community football practice assistant",
   Badminton: "Junior badminton session helper",
@@ -55,13 +56,13 @@ const players = playerNames.map((name, index) => {
   };
 });
 const organisations = orgNames.map((name, index) => ({
-  id: id("org", index), name, location: loc(index).label,
+  id: id("org", index), name, location: loc(orgAreaIndices[index]).label,
   type: index % 3 === 0 ? "Community sports club" : index % 3 === 1 ? "Court operator" : "Training academy",
   sport: sportForOrg[index], verification: "Fictional example",
 }));
 const venues = organisations.map((org, index) => ({
   id: id("venue", index), orgId: org.id, orgName: org.name,
-  name: `${org.name} ${org.sport === "Football" ? "Turf" : org.sport === "Basketball" ? "Court" : "Courts"}`,
+  name: org.name.endsWith("Courts") ? org.name : `${org.name} ${org.sport === "Football" ? "Turf" : org.sport === "Basketball" ? "Court" : "Courts"}`,
   sport: org.sport, location: org.location,
   pricePerHour: 450 + (index % 6) * 150,
   facilities: org.sport === "Football" ? ["Floodlights", "Water", "Changing Room"] : ["Water", "Equipment Rental", "Seating"],
@@ -91,7 +92,7 @@ const entries = [
 export const demoCatalogSeed = entries;
 const sqlString = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const values = entries.map(([kind, payload]) => `  (${sqlString(payload.id)}, ${sqlString(kind)}, ${sqlString(JSON.stringify(payload))}::jsonb)`).join(",\n");
-const sql = `-- Fictional, read-only examples kept separate from auth users and transactional tables.\n` +
+const sql = `-- Align fictional organisation, venue, and role details without touching user records.\n` +
 `create table if not exists public.demo_catalog_entries (\n` +
 `  entry_id text primary key,\n` +
 `  kind text not null check (kind in ('player', 'organisation', 'venue', 'opportunity', 'game')),\n` +
@@ -102,9 +103,9 @@ const sql = `-- Fictional, read-only examples kept separate from auth users and 
 `revoke all on public.demo_catalog_entries from anon, authenticated;\n` +
 `grant select on public.demo_catalog_entries to service_role;\n` +
 `insert into public.demo_catalog_entries (entry_id, kind, payload) values\n${values}\n` +
-`on conflict (entry_id) do nothing;\n`;
+`on conflict (entry_id) do update set kind = excluded.kind, payload = excluded.payload;\n`;
 
-const out = fileURLToPath(new URL("../supabase/migrations/202609230002_demo_catalog.sql", import.meta.url));
+const out = fileURLToPath(new URL("../supabase/migrations/202609230003_demo_catalog_alignment.sql", import.meta.url));
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   writeFileSync(out, sql);
   console.log(`Wrote ${entries.length} fictional examples: ${players.length} players, ${organisations.length} organisations, ${venues.length} venues, ${opportunities.length} opportunities, ${games.length} games.`);

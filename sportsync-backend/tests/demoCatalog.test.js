@@ -21,9 +21,12 @@ test("demo seed has the requested population and connected examples", () => {
   for (const venue of catalog.venues) {
     assert.equal(venue.orgName, orgs.get(venue.orgId)?.name);
     assert.equal(venue.sport, orgs.get(venue.orgId)?.sport);
+    assert.equal(venue.location, orgs.get(venue.orgId)?.location);
+    assert.ok(!venue.name.includes("Courts Courts"));
   }
   for (const opportunity of catalog.opportunities) {
     assert.equal(opportunity.orgName, orgs.get(opportunity.orgId)?.name);
+    assert.equal(opportunity.location, orgs.get(opportunity.orgId)?.location);
     assert.equal(opportunity.organisationVerified, false);
     assert.equal(opportunity.deadline, null);
   }
@@ -46,8 +49,14 @@ test("sample profiles cannot be mistaken for authenticated accounts or verified 
     assert.equal(org.demo, true);
     assert.equal(org.verification, "Fictional example");
   }
-  const sql = readFileSync(new URL("../supabase/migrations/202609230002_demo_catalog.sql", import.meta.url), "utf8");
+  const sql = readFileSync(new URL("../supabase/migrations/202609230003_demo_catalog_alignment.sql", import.meta.url), "utf8");
   assert.match(sql, /create table if not exists public\.demo_catalog_entries/);
   assert.match(sql, /revoke all on public\.demo_catalog_entries from anon, authenticated/);
   for (const id of demoCatalogSeed.map(([, payload]) => payload.id)) assert.ok(sql.includes(id));
+  for (const org of catalog.organisations) {
+    const area = org.name.split(" ")[0];
+    if (["Indiranagar", "Whitefield", "Koramangala", "HSR", "Malleshwaram", "Bellandur", "Jayanagar", "JP"].includes(area)) {
+      assert.ok(org.location.startsWith(area), `${org.name} is placed in ${org.location}`);
+    }
+  }
 });

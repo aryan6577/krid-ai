@@ -17,7 +17,7 @@ The configured Supabase project currently has email auto-confirmation enabled. T
 
 ### Fictional demo catalog
 
-Apply `sportsync-backend/supabase/migrations/202609230002_demo_catalog.sql` after the Career migration. It seeds 24 fictional player profiles and 12 fictional organisations, each linked to a sample venue and career listing, plus 10 example games. The examples live in a separate read-only table and do not create Supabase Auth users, bookings, applications, activity, awards, or verified organisations. The web API serves the same catalog to player and organisation pages at `/api/demo/catalog`, and `/demo` offers a public read-only preview; sample cards cannot be joined, booked, or applied to. To update the fixture, edit `sportsync-backend/scripts/buildDemoCatalog.mjs`, run it with Node, then add a new additive migration for already deployed databases.
+Apply `sportsync-backend/supabase/migrations/202609230002_demo_catalog.sql` and `202609230003_demo_catalog_alignment.sql` after the Career migration. They seed 24 fictional player profiles and 12 fictional organisations, each linked to a sample venue and career listing, plus 10 example games. The examples live in a separate read-only table and do not create Supabase Auth users, bookings, applications, activity, awards, or verified organisations. The web API serves the same catalog to player and organisation pages at `/api/demo/catalog`, and `/demo` offers a public read-only preview; sample cards cannot be joined, booked, or applied to. To update the fixture, edit `sportsync-backend/scripts/buildDemoCatalog.mjs`, run it with Node, then add a new additive migration for already deployed databases.
 
 On Windows, run these commands in separate PowerShell terminals after installing dependencies:
 
