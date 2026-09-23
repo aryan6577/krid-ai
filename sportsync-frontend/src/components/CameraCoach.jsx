@@ -6,6 +6,7 @@ import { createLivePoseTracker } from "../lib/livePoseTracker";
 const CONNECTIONS = [[5, 7], [7, 9], [6, 8], [8, 10], [5, 6], [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16]];
 const MAX_FRAMES = 300;
 const MAX_SECONDS = 60;
+const MAX_WAITING_FRAMES = 2;
 
 export default function CameraCoach({ token, cameraView, exercise, targets, onPose, busy }) {
   const videoRef = useRef(null);
@@ -87,8 +88,11 @@ export default function CameraCoach({ token, cameraView, exercise, targets, onPo
     const encodedAt = performance.now();
     const imageBase64 = canvas.toDataURL("image/jpeg", 0.55);
     setTimings((old) => ({ ...old, captureMs: Math.round(captureMs), jpegEncodeMs: Math.round(performance.now() - encodedAt) }));
-    if (framesRef.current.length) droppedRef.current += framesRef.current.length;
-    framesRef.current = [{ timestampMs: Math.round(performance.now() - startedRef.current), imageBase64 }];
+    if (framesRef.current.length >= MAX_WAITING_FRAMES) {
+      framesRef.current.shift();
+      droppedRef.current += 1;
+    }
+    framesRef.current.push({ timestampMs: Math.round(performance.now() - startedRef.current), imageBase64 });
     setProgress((old) => ({ ...old, waiting: framesRef.current.length }));
     capturedCountRef.current += 1;
     if (!pendingRef.current) drain().catch((err) => {
@@ -125,7 +129,7 @@ export default function CameraCoach({ token, cameraView, exercise, targets, onPo
     const task = (async () => {
       while (framesRef.current.length) {
         const requestStarted = performance.now();
-        const batch = await api.analyzePoseFrames(token, [framesRef.current.shift()]);
+        const batch = await api.analyzePoseFrames(token, framesRef.current.splice(0, MAX_WAITING_FRAMES));
         const latest = batch.frames.at(-1);
         setTimings((old) => ({ ...old, ...batch.timingsMs, requestMs: Math.round(performance.now() - requestStarted), feedbackLagMs: latest ? Math.round(performance.now() - startedRef.current - latest.timestampMs) : null }));
         samplesRef.current.push(...batch.frames);
