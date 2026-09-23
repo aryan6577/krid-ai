@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Anton", sans-serif;
+  --font-body: "Work Sans", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  --color-paper: #F5F6F0;
+  --color-paper-dim: #ECEEE4;
+  --color-ink: #12201B;
+  --color-ink-soft: #3C4A42;
+  --color-turf: #1F6F4A;
+  --color-turf-deep: #0F3D28;
+  --color-turf-light: #E4F1E9;
+  --color-clay: #E2672A;
+  --color-clay-deep: #B34D1B;
+  --color-clay-light: #FBE4D6;
+  --color-gold: #E8B93F;
+  --color-gold-light: #FBF0D2;
+  --color-line: #FFFFFF;
+  --color-navy: #1B3A5C;
+  --color-navy-light: #E3EBF3;
+}
+
+html {
+  font-family: var(--font-body);
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+}
+
+.coach-button, .coach-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  border-radius: .75rem;
+  padding: .65rem 1rem;
+  font-size: .875rem;
+  font-weight: 700;
+}
+.coach-button { background: var(--color-clay); color: white; }
+.coach-button:hover { background: var(--color-clay-deep); }
+.coach-secondary { background: var(--color-paper-dim); color: var(--color-ink); }
+.coach-button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Field markings texture used behind hero / auth panels */
+.pitch-lines {
+  background-image:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px, transparent 1px, transparent 64px);
+}
+
+.scoreboard {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.stitch-border {
+  border: 2px dashed rgba(18,32,27,0.18);
+}
+
+/* Hides scrollbar for the horizontally-scrollable top nav on narrower desktop widths */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(18,32,27,0.2);
+  border-radius: 8px;
+}
+
+@keyframes swipe-out-right {
+  to { transform: translateX(140%) rotate(18deg); opacity: 0; }
+}
+@keyframes swipe-out-left {
+  to { transform: translateX(-140%) rotate(-18deg); opacity: 0; }
+}
+.animate-swipe-right { animation: swipe-out-right 0.35s ease-in forwards; }
+.animate-swipe-left { animation: swipe-out-left 0.35s ease-in forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-swipe-right, .animate-swipe-left { animation: none !important; }
+}

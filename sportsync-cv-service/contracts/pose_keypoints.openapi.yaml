@@ -1,0 +1,216 @@
+openapi: 3.1.0
+info:
+  title: Krid.ai CV Pose Keypoint Contract
+  version: 1.0.0
+  description: |
+    Frozen Phase 6 perception contract. This service is standalone and returns YOLOv8-Pose
+    keypoints only. Downstream exercise/tutorial/match rule engines must import this contract
+    instead of redefining response shapes.
+
+    The service never fabricates or interpolates missing keypoints. If a sampled frame fails
+    quality gates, `quality.flag` is `insufficient`, `quality.requestReframing` is true, and
+    `keypoints` is null.
+paths:
+  /v1/pose/video:
+    post:
+      summary: Process a sampled uploaded video with YOLOv8-Pose.
+      security:
+        - CvServiceKey: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [video]
+              properties:
+                video:
+                  type: string
+                  format: binary
+                sampleFps:
+                  type: number
+                  exclusiveMinimum: 0
+                  description: Optional override for configured frame sampling rate.
+      responses:
+        "200":
+          description: Pose keypoint batch response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoseBatchResponse"
+  /v1/pose/frames:
+    post:
+      summary: Process a batch of base64-encoded frames.
+      security:
+        - CvServiceKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FrameBatchRequest"
+      responses:
+        "200":
+          description: Pose keypoint batch response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoseBatchResponse"
+components:
+  securitySchemes:
+    CvServiceKey:
+      type: apiKey
+      in: header
+      name: X-Krid-CV-Key
+  schemas:
+    FrameBatchRequest:
+      type: object
+      required: [frames]
+      properties:
+        sampleFps:
+          type: number
+          exclusiveMinimum: 0
+        frames:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [timestampMs, imageBase64]
+            properties:
+              timestampMs:
+                type: number
+                minimum: 0
+              imageBase64:
+                type: string
+                description: Base64-encoded image bytes. Data URLs are accepted.
+    PoseBatchResponse:
+      type: object
+      required: [schemaVersion, status, requestReframing, sampling, frames]
+      properties:
+        schemaVersion:
+          const: krid.cv.pose.v1
+        status:
+          type: string
+          enum: [ok, insufficient_quality]
+        requestReframing:
+          type: boolean
+        sampling:
+          $ref: "#/components/schemas/SamplingConfig"
+        frames:
+          type: array
+          items:
+            $ref: "#/components/schemas/PoseFrameSample"
+        timingsMs:
+          type: [object, "null"]
+          additionalProperties:
+            type: number
+          description: Optional JPEG decode and pose inference plus quality timing for diagnostics.
+    SamplingConfig:
+      type: object
+      required: [requestedFps, frameInterval, maxSamples, processedSamples]
+      properties:
+        requestedFps:
+          type: number
+          exclusiveMinimum: 0
+        sourceFps:
+          type: [number, "null"]
+          exclusiveMinimum: 0
+        frameInterval:
+          type: integer
+          minimum: 1
+        maxSamples:
+          type: integer
+          minimum: 1
+        processedSamples:
+          type: integer
+          minimum: 0
+    PoseFrameSample:
+      type: object
+      required: [frameIndex, timestampMs, quality, keypoints]
+      properties:
+        frameIndex:
+          type: integer
+          minimum: 0
+        timestampMs:
+          type: number
+          minimum: 0
+        quality:
+          $ref: "#/components/schemas/FrameQuality"
+        keypoints:
+          oneOf:
+            - type: array
+              minItems: 17
+              maxItems: 17
+              items:
+                $ref: "#/components/schemas/PoseKeypoint"
+            - type: "null"
+          description: Exactly 17 keypoints only when quality.flag is sufficient. Null when quality is insufficient.
+    FrameQuality:
+      type: object
+      required: [flag, requestReframing, reasons, message, visibleKeypointCount]
+      properties:
+        flag:
+          type: string
+          enum: [sufficient, insufficient]
+        requestReframing:
+          type: boolean
+        reasons:
+          type: array
+          items:
+            type: string
+            enum:
+              - no_visible_person
+              - multiple_people
+              - severe_occlusion
+              - insufficient_average_keypoint_confidence
+        message:
+          type: string
+          enum:
+            - sufficient quality
+            - insufficient quality — request reframing
+        personConfidence:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+        averageKeypointConfidence:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+        visibleKeypointCount:
+          type: integer
+          minimum: 0
+          maximum: 17
+    PoseKeypoint:
+      type: object
+      required: [name, x, y, confidence]
+      properties:
+        name:
+          type: string
+          enum:
+            - nose
+            - left_eye
+            - right_eye
+            - left_ear
+            - right_ear
+            - left_shoulder
+            - right_shoulder
+            - left_elbow
+            - right_elbow
+            - left_wrist
+            - right_wrist
+            - left_hip
+            - right_hip
+            - left_knee
+            - right_knee
+            - left_ankle
+            - right_ankle
+        x:
+          type: number
+          description: X coordinate in source-frame pixels.
+        y:
+          type: number
+          description: Y coordinate in source-frame pixels.
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1

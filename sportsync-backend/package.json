@@ -1,0 +1,17 @@
+{
+  "name": "sportsync-backend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Minimal Express backend that powers the Krid.ai chat assistant via Groq's free LLM API.",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
