@@ -24,12 +24,15 @@ export default function WeatherWidget({ weather, title = "Weather", loading = fa
           </span>
         )}
       </div>
+      {!loading && weather?.location?.source === "open-meteo-geocoding-city-fallback" && (
+        <p className="text-xs text-ink-soft mt-2">Approximate city forecast near {weather.location.resolvedLabel}; this area could not be located precisely.</p>
+      )}
 
       {loading ? <p role="status" className="text-sm text-ink-soft mt-4">Checking current conditions…</p> : current ? (
         <div className="grid grid-cols-2 gap-3 mt-4">
-          <Metric label="Temp" value={`${current.temperatureC} C`} />
-          <Metric label="Rain" value={`${current.precipitationMm} mm`} />
-          <Metric label="Wind" value={`${current.windKph} kph`} />
+          <Metric label="Temp" value={current.temperatureC == null ? "—" : `${current.temperatureC} °C`} />
+          <Metric label="Rain" value={current.precipitationMm == null ? "—" : `${current.precipitationMm} mm`} />
+          <Metric label="Wind" value={current.windKph == null ? "—" : `${current.windKph} km/h`} />
           <Metric label="Sky" value={current.summary} />
         </div>
       ) : (
@@ -43,7 +46,7 @@ export default function WeatherWidget({ weather, title = "Weather", loading = fa
           {weather.forecast.slice(0, 3).map((day) => (
             <div key={day.date} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs text-ink-soft">
               <span>{day.date}</span>
-              <span>{day.summary} · {day.lowC}-{day.highC} C · {day.precipitationProbability}% rain</span>
+              <span>{day.summary} · {day.lowC ?? "—"}–{day.highC ?? "—"} °C · {day.precipitationProbability == null ? "Rain chance unavailable" : `${day.precipitationProbability}% rain chance`}</span>
             </div>
           ))}
         </div>
@@ -51,6 +54,7 @@ export default function WeatherWidget({ weather, title = "Weather", loading = fa
 
       {current && <p className="text-sm font-semibold text-turf-deep mt-4">{Number(current.precipitationMm) > 0 || Number(weather?.forecast?.[0]?.precipitationProbability) >= 60 ? "Rain is possible. Check venue cover and bring suitable footwear." : Number(current.temperatureC) >= 32 ? "It is hot. Consider a cooler training time and carry water." : Number(current.windKph) >= 25 ? "Wind may affect outdoor drills. Consider a sheltered court." : "Conditions look suitable for a normal session; check the venue before leaving."}</p>}
       <p className="text-xs text-ink-soft mt-4">{weather?.advisory || "Weather is advisory only and never blocks booking."}</p>
+      {weather?.provider === "open-meteo" && <p className="text-xs text-ink-soft mt-2">Forecast by <a href="https://open-meteo.com/" target="_blank" rel="noreferrer" className="underline">Open-Meteo</a>.</p>}
     </div>
   );
 }

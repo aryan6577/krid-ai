@@ -4,7 +4,6 @@ import { api } from "../lib/api";
 import { createLivePoseTracker } from "../lib/livePoseTracker";
 
 const CONNECTIONS = [[5, 7], [7, 9], [6, 8], [8, 10], [5, 6], [5, 11], [6, 12], [11, 12], [11, 13], [13, 15], [12, 14], [14, 16]];
-const BATCH_FRAMES = 3;
 const MAX_FRAMES = 300;
 const MAX_SECONDS = 60;
 
@@ -72,9 +71,8 @@ export default function CameraCoach({ token, cameraView, exercise, targets, onPo
       finish();
       return;
     }
-    // If inference is slower than capture, skip a frame rather than building
-    // an unbounded queue of camera images in the browser.
-    if (framesRef.current.length >= 6) { droppedRef.current += 1; setProgress((old) => ({ ...old, skipped: droppedRef.current })); return; }
+    // Keep the freshest waiting image while the model works. Replaying old
+    // images after a slow request makes the overlay appear seconds behind.
     const canvas = canvasRef.current || document.createElement("canvas");
     canvasRef.current = canvas;
     canvas.width = 320;
@@ -89,10 +87,11 @@ export default function CameraCoach({ token, cameraView, exercise, targets, onPo
     const encodedAt = performance.now();
     const imageBase64 = canvas.toDataURL("image/jpeg", 0.55);
     setTimings((old) => ({ ...old, captureMs: Math.round(captureMs), jpegEncodeMs: Math.round(performance.now() - encodedAt) }));
-    framesRef.current.push({ timestampMs: Math.round(performance.now() - startedRef.current), imageBase64 });
+    if (framesRef.current.length) droppedRef.current += framesRef.current.length;
+    framesRef.current = [{ timestampMs: Math.round(performance.now() - startedRef.current), imageBase64 }];
     setProgress((old) => ({ ...old, waiting: framesRef.current.length }));
     capturedCountRef.current += 1;
-    if (framesRef.current.length >= (samplesRef.current.length ? BATCH_FRAMES : 1)) drain().catch((err) => {
+    if (!pendingRef.current) drain().catch((err) => {
       setError(err.message || "Tracking failed. Please try again.");
       stopStream();
       setState("idle");
@@ -122,15 +121,15 @@ export default function CameraCoach({ token, cameraView, exercise, targets, onPo
       await pendingRef.current;
       if (!flushRemainder) return;
     }
-    if (framesRef.current.length < (samplesRef.current.length ? BATCH_FRAMES : 1) && !(flushRemainder && framesRef.current.length)) return;
+    if (!framesRef.current.length) return;
     const task = (async () => {
-      while (framesRef.current.length >= (samplesRef.current.length ? BATCH_FRAMES : 1) || (flushRemainder && framesRef.current.length)) {
+      while (framesRef.current.length) {
         const requestStarted = performance.now();
-        const batch = await api.analyzePoseFrames(token, framesRef.current.splice(0, samplesRef.current.length ? BATCH_FRAMES : 1));
-        setTimings((old) => ({ ...old, ...batch.timingsMs, requestMs: Math.round(performance.now() - requestStarted) }));
+        const batch = await api.analyzePoseFrames(token, [framesRef.current.shift()]);
+        const latest = batch.frames.at(-1);
+        setTimings((old) => ({ ...old, ...batch.timingsMs, requestMs: Math.round(performance.now() - requestStarted), feedbackLagMs: latest ? Math.round(performance.now() - startedRef.current - latest.timestampMs) : null }));
         samplesRef.current.push(...batch.frames);
         setProgress({ analysed: samplesRef.current.length, waiting: framesRef.current.length, skipped: droppedRef.current });
-        const latest = batch.frames.at(-1);
         setPreview(latest?.keypoints || null);
         setQuality(latest?.quality?.flag === "sufficient" ? `${samplesRef.current.length} frames tracked · body visible` : latest?.quality?.reasons?.includes("multiple_people") ? "More than one person is visible. Keep only yourself in frame." : "Pose unclear — improve light and keep your full body in frame.");
         if (trackerRef.current) {
@@ -162,6 +161,7 @@ export default function CameraCoach({ token, cameraView, exercise, targets, onPo
     try {
       await drain(true);
       const samples = samplesRef.current;
+      if (samples.length < 3) throw new Error("Too few frames were analysed. Please record a longer session before evaluating movement.");
       const insufficient = samples.some((frame) => frame.quality.flag !== "sufficient");
       await onPose({
         schemaVersion: "krid.cv.pose.v1",
@@ -211,7 +211,7 @@ export default function CameraCoach({ token, cameraView, exercise, targets, onPo
       </div>
       {(state === "recording" || state === "processing" || state === "complete") && <p role="status" className="text-sm font-semibold text-turf-deep">{quality}</p>}
       {(state === "recording" || state === "processing") && <p className="text-xs text-ink-soft" aria-live="polite">{progress.analysed} frames analysed · {progress.waiting} waiting · {progress.skipped} skipped while the model catches up</p>}
-      {timings && <details className="text-xs text-ink-soft"><summary className="cursor-pointer">Tracking speed details</summary><p>Capture {timings.captureMs ?? "—"} ms · JPEG {timings.jpegEncodeMs ?? "—"} ms · Request including transfer {timings.requestMs ?? "—"} ms · CV round trip {timings.cvRoundTrip ?? "—"} ms · JPEG decode {timings.jpegDecode ?? "—"} ms · Pose and quality {timings.poseInferenceAndQuality ?? "—"} ms · UI frame {timings.uiFrameMs ?? "—"} ms</p></details>}
+      {timings && <details className="text-xs text-ink-soft"><summary className="cursor-pointer">Tracking speed details</summary><p>Feedback age {timings.feedbackLagMs ?? "—"} ms · Capture {timings.captureMs ?? "—"} ms · JPEG {timings.jpegEncodeMs ?? "—"} ms · Request including transfer {timings.requestMs ?? "—"} ms · Account lookup {timings.authProfile ?? "—"} ms · CV round trip {timings.cvRoundTrip ?? "—"} ms · JPEG decode {timings.jpegDecode ?? "—"} ms · Pose and quality {timings.poseInferenceAndQuality ?? "—"} ms · UI frame {timings.uiFrameMs ?? "—"} ms</p></details>}
       {error && <p role="alert" className="rounded-xl bg-clay-light p-3 text-sm text-clay-deep">{error}</p>}
       <p className="text-xs text-ink-soft">Movement feedback is informational and depends on camera quality. It is not medical advice.</p>
     </div>

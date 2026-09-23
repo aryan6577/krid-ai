@@ -1965,8 +1965,13 @@ app.get("/api/streaks/month", requireUser, async (req, res) => {
 app.post("/api/cv/pose/frames", requireUser, async (req, res) => {
   try {
     const started = performance.now();
-    const bundle = await requirePlayerBundle(req, res);
-    if (!bundle) return;
+    // Frame analysis only needs the account role; fetching the whole player
+    // profile on every sample adds a separate database round trip.
+    const accountRows = await supabaseDb(`/account_profiles?select=role,player_id&account_id=eq.${encodeFilterValue(req.user.id)}&limit=1`);
+    if (accountRows?.[0]?.role !== "Player" || !accountRows[0].player_id) {
+      return res.status(403).json({ error: "Complete Player onboarding before using camera tracking." });
+    }
+    const authProfileMs = performance.now() - started;
     const frames = req.body?.frames;
     if (!Array.isArray(frames) || frames.length < 1 || frames.length > 12 ||
         frames.some((frame) => !Number.isFinite(frame?.timestampMs) || frame.timestampMs < 0 ||
@@ -1984,7 +1989,7 @@ app.post("/api/cv/pose/frames", requireUser, async (req, res) => {
     const cvRoundTripMs = performance.now() - upstreamStarted;
     const data = await parseJsonResponse(response);
     if (!response.ok) return res.status(502).json({ error: data?.detail || "Pose service rejected the frames." });
-    res.json({ ...data, timingsMs: { ...data.timingsMs, cvRoundTrip: Math.round(cvRoundTripMs), backendTotal: Math.round(performance.now() - started) } });
+    res.json({ ...data, timingsMs: { ...data.timingsMs, authProfile: Math.round(authProfileMs), cvRoundTrip: Math.round(cvRoundTripMs), backendTotal: Math.round(performance.now() - started) } });
   } catch (err) {
     res.status(503).json({ error: "Pose service is unavailable. Start the CV service and try again." });
   }

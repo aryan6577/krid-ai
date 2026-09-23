@@ -18,8 +18,9 @@ export function createExternalContextService({ fetchImpl = fetch, now = () => ne
       return unavailableWeather(requestedLocation, "Location coordinates are unavailable.");
     }
 
-    const key = cacheKeyForCoords("weather", resolved.coordinates, roundedHour(now()));
-    const locationPrefix = cacheKeyForCoords("weather", resolved.coordinates);
+    // Keep labels apart even when an unresolved area uses its city centre.
+    const locationPrefix = `${cacheKeyForCoords("weather", resolved.coordinates)}${requestedLocation.toLowerCase()}:`;
+    const key = `${locationPrefix}${roundedHour(now())}`;
     const cached = weatherCache.get(key);
     if (cached && isFresh(cached.retrievedAt, WEATHER_TTL_MS, now)) {
       return { ...cached.value, cache: cacheMeta(cached, "fresh", now) };
@@ -34,9 +35,12 @@ export function createExternalContextService({ fetchImpl = fetch, now = () => ne
       url.searchParams.set("forecast_days", "3");
       url.searchParams.set("timezone", "auto");
 
-      const response = await fetchImpl(url);
+      const response = await fetchImpl(url, { signal: AbortSignal.timeout(6000) });
       const data = await parseJson(response);
       if (!response.ok) throw new Error(data?.reason || data?.error || `Weather provider returned HTTP ${response.status}.`);
+      if (data?.current?.temperature_2m == null || !data?.current?.time) {
+        throw new Error("Current conditions are missing from the weather response.");
+      }
 
       const value = normalizeWeather(data, requestedLocation, resolved);
       weatherCache.set(key, { retrievedAt: now().toISOString(), value });
@@ -115,28 +119,57 @@ export function createExternalContextService({ fetchImpl = fetch, now = () => ne
     if (cached && isFresh(cached.retrievedAt, GEOCODE_TTL_MS, now)) return cached.value;
 
     try {
-      const url = new URL(OPEN_METEO_GEOCODE_URL);
-      url.searchParams.set("name", label);
-      url.searchParams.set("count", "1");
-      url.searchParams.set("language", "en");
-      url.searchParams.set("format", "json");
-      const response = await fetchImpl(url);
-      const data = await parseJson(response);
-      if (!response.ok) throw new Error(data?.reason || data?.error || `Geocoder returned HTTP ${response.status}.`);
-      const result = data?.results?.[0];
+      let result = (await geocode(label, 1))[0];
+      let source = "open-meteo-geocoding";
+      let resolvedLabel = result?.name || label;
+      if (!result && label.includes(",")) {
+        const [area, city] = label.split(",").map((part) => part.trim());
+        const [areaResults, cityResults] = await Promise.all([geocode(area, 20), geocode(city, 1)]);
+        const cityResult = cityResults[0];
+        const nearCity = cityResult && areaResults
+          .filter((candidate) => !cityResult.country_code || candidate.country_code === cityResult.country_code)
+          .map((candidate) => ({ candidate, km: haversineKm(
+            { lat: candidate.latitude, lng: candidate.longitude },
+            { lat: cityResult.latitude, lng: cityResult.longitude }
+          ) }))
+          .sort((a, b) => a.km - b.km)[0];
+        if (nearCity && nearCity.km <= 80) {
+          result = nearCity.candidate;
+          source = "open-meteo-geocoding-area";
+          resolvedLabel = `${result.name}, ${cityResult.name}`;
+        } else if (cityResult) {
+          result = cityResult;
+          source = "open-meteo-geocoding-city-fallback";
+          resolvedLabel = cityResult.name;
+        }
+      }
       const value = {
         label,
         coordinates:
           result && Number.isFinite(Number(result.latitude)) && Number.isFinite(Number(result.longitude))
             ? { lat: Number(result.latitude), lng: Number(result.longitude) }
             : null,
-        source: "open-meteo-geocoding",
+        source,
+        resolvedLabel,
       };
       geocodeCache.set(key, { retrievedAt: now().toISOString(), value });
       return value;
     } catch {
       return { label, coordinates: null, source: "unavailable" };
     }
+  }
+
+  async function geocode(name, count) {
+    if (!name) return [];
+    const url = new URL(OPEN_METEO_GEOCODE_URL);
+    url.searchParams.set("name", name);
+    url.searchParams.set("count", String(count));
+    url.searchParams.set("language", "en");
+    url.searchParams.set("format", "json");
+    const response = await fetchImpl(url, { signal: AbortSignal.timeout(6000) });
+    const data = await parseJson(response);
+    if (!response.ok) throw new Error(data?.reason || data?.error || `Geocoder returned HTTP ${response.status}.`);
+    return data?.results || [];
   }
 
   return { getWeather, getTravelContext, resolveLocation };
@@ -155,11 +188,12 @@ function normalizeWeather(data, requestedLocation, resolved) {
       label: requestedLocation || resolved.label,
       coordinates: resolved.coordinates,
       source: resolved.source,
+      resolvedLabel: resolved.resolvedLabel || null,
     },
     current: {
       observedAt: current.time || null,
       temperatureC: round(current.temperature_2m),
-      humidityPercent: Number(current.relative_humidity_2m ?? 0),
+      humidityPercent: current.relative_humidity_2m == null ? null : Number(current.relative_humidity_2m),
       precipitationMm: round(current.precipitation),
       windKph: round(current.wind_speed_10m),
       weatherCode: current.weather_code,
@@ -169,7 +203,7 @@ function normalizeWeather(data, requestedLocation, resolved) {
       date,
       highC: round(daily.temperature_2m_max?.[index]),
       lowC: round(daily.temperature_2m_min?.[index]),
-      precipitationProbability: Number(daily.precipitation_probability_max?.[index] ?? 0),
+      precipitationProbability: daily.precipitation_probability_max?.[index] == null ? null : Number(daily.precipitation_probability_max[index]),
       weatherCode: daily.weather_code?.[index],
       summary: weatherCodeSummary(daily.weather_code?.[index]),
     })),
@@ -282,5 +316,5 @@ function weatherCodeSummary(code) {
 }
 
 function round(value) {
-  return Number.isFinite(Number(value)) ? Math.round(Number(value) * 10) / 10 : null;
+  return value != null && value !== "" && Number.isFinite(Number(value)) ? Math.round(Number(value) * 10) / 10 : null;
 }

@@ -17,6 +17,7 @@ export default function Venues() {
   const [availability, setAvailability] = useState("");
   const [venues, setVenues] = useState([]);
   const [weather, setWeather] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
   const [bookingWeather, setBookingWeather] = useState(null);
   const [booking, setBooking] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState("");
@@ -59,6 +60,7 @@ export default function Venues() {
 
   useEffect(() => {
     let cancelled = false;
+    setWeatherLoading(Boolean(session.accessToken && (location || currentPlayer.location)));
     async function loadWeather() {
       try {
         const data = await api.getWeather(session.accessToken, location ? { location } : {});
@@ -74,11 +76,14 @@ export default function Venues() {
             advisory: "Weather is advisory only and never blocks booking.",
           });
         }
-      }
+      } finally { if (!cancelled) setWeatherLoading(false); }
     }
-    if (session.accessToken && (location || currentPlayer.location)) loadWeather();
+    const timer = session.accessToken && (location || currentPlayer.location)
+      ? setTimeout(loadWeather, location ? 350 : 0)
+      : null;
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [session.accessToken, location, currentPlayer.location]);
 
@@ -225,7 +230,7 @@ export default function Venues() {
       </div>
 
       <div className="mb-6">
-        <WeatherWidget weather={weather} title="Play weather" />
+        <WeatherWidget weather={weather} loading={weatherLoading} title="Play weather" />
       </div>
 
       {error && <p className="text-sm text-clay-deep bg-clay-light rounded-xl px-3 py-2 mb-5">{error}</p>}
