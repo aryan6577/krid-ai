@@ -3,6 +3,7 @@ import { AppProvider, useApp } from "./context/AppContext";
 import Layout from "./components/Layout";
 
 import Landing from "./pages/Landing";
+import DemoExplorer from "./pages/DemoExplorer";
 import Auth from "./pages/auth/Auth";
 import Onboarding from "./pages/auth/Onboarding";
 
@@ -47,6 +48,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/demo" element={<DemoExplorer />} />
       <Route path="/auth" element={<Auth />} />
       <Route
         path="/onboarding"

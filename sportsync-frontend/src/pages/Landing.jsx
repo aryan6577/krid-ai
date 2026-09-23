@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Swords, Users2, MapPinned, LineChart } from "lucide-react";
 import { PrimaryButton, GhostButton, Badge } from "../components/ui";
 import { BrandMark, BrandWordmark } from "../components/Brand";
@@ -46,38 +46,39 @@ export default function Landing() {
                 I already play
               </GhostButton>
             </div>
+            <Link to="/demo" className="inline-flex items-center gap-1 text-sm font-semibold text-gold underline mt-5">Explore the sample community <ArrowRight size={15} /></Link>
           </div>
 
-          {/* Signature element: a live "match card" scoreboard mock */}
+          {/* Illustrative discovery card; no real person's activity or match result. */}
           <div className="relative mx-auto w-full max-w-sm">
             <div className="bg-white text-ink rounded-3xl shadow-2xl p-5 rotate-2">
               <div className="flex items-center justify-between mb-4">
-                <Badge tone="turf">92% match</Badge>
-                <span className="scoreboard text-xs text-ink-soft">FOOTBALL · 7 KM</span>
+                <Badge tone="gold">Sample preview</Badge>
+                <span className="scoreboard text-xs text-ink-soft">FOOTBALL · BENGALURU</span>
               </div>
               <div className="w-full h-40 rounded-2xl bg-turf-light flex items-center justify-center mb-4">
-                <span className="w-20 h-20 rounded-full bg-turf text-white font-display text-3xl flex items-center justify-center">AD</span>
+                <span className="w-20 h-20 rounded-full bg-turf text-white font-display text-3xl flex items-center justify-center"><Users2 size={34} /></span>
               </div>
-              <p className="font-display text-2xl tracking-wide">Arjun Das</p>
-              <p className="text-sm text-ink-soft mb-4">Advanced · Weekday Evenings · Competitive</p>
+              <p className="font-display text-2xl tracking-wide">Find your next teammate</p>
+              <p className="text-sm text-ink-soft mb-4">Explore players by sport, skill, availability and area.</p>
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-paper-dim rounded-lg py-2">
-                  <p className="scoreboard text-lg font-bold">1601</p>
-                  <p className="text-[10px] uppercase text-ink-soft">Rating</p>
+                  <p className="scoreboard text-sm font-bold">Sport</p>
+                  <p className="text-[10px] uppercase text-ink-soft">Shared interest</p>
                 </div>
                 <div className="bg-paper-dim rounded-lg py-2">
-                  <p className="scoreboard text-lg font-bold">14</p>
-                  <p className="text-[10px] uppercase text-ink-soft">Streak</p>
+                  <p className="scoreboard text-sm font-bold">Skill</p>
+                  <p className="text-[10px] uppercase text-ink-soft">Play level</p>
                 </div>
                 <div className="bg-paper-dim rounded-lg py-2">
-                  <p className="scoreboard text-lg font-bold">80%</p>
-                  <p className="text-[10px] uppercase text-ink-soft">Form</p>
+                  <p className="scoreboard text-sm font-bold">Area</p>
+                  <p className="text-[10px] uppercase text-ink-soft">Distance</p>
                 </div>
               </div>
             </div>
             <div className="absolute -bottom-6 -left-6 bg-clay text-white rounded-2xl shadow-xl px-5 py-3 -rotate-3">
-              <p className="text-[10px] uppercase tracking-widest text-white/70">Balance Score</p>
-              <p className="scoreboard text-2xl font-bold">96/100</p>
+              <p className="text-[10px] uppercase tracking-widest text-white/70">Explore together</p>
+              <p className="scoreboard text-lg font-bold">Just play</p>
             </div>
           </div>
         </div>
