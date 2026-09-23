@@ -5,13 +5,12 @@ import WeatherWidget from "../../components/WeatherWidget";
 import { SectionHeading, Badge, PrimaryButton, GhostButton, Modal, EmptyState } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import { api } from "../../lib/api";
-import { venues as sampleVenues } from "../../data/venues";
 
 const SPORTS = ["Football", "Badminton", "Tennis", "Basketball"];
 const SLOTS = ["", "Weekday Mornings", "Weekday Evenings", "Sunday Morning", "Weekend Evenings"];
 
 export default function Venues() {
-  const { session, currentPlayer, pushNotification } = useApp();
+  const { session, currentPlayer, pushNotification, demoCatalog, demoLoading, demoError } = useApp();
   const [sport, setSport] = useState(currentPlayer.sports[0] || "Football");
   const [budget, setBudget] = useState(1500);
   const [location, setLocation] = useState("");
@@ -26,6 +25,11 @@ export default function Venues() {
   const [paymentMessage, setPaymentMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const sampleVenues = demoCatalog.venues.filter((venue) =>
+    venue.sport === sport && venue.pricePerHour <= budget &&
+    (!location || venue.location.toLowerCase().includes(location.toLowerCase())) &&
+    (!availability || venue.availability.includes(availability))
+  );
 
   const loadVenues = async () => {
     setLoading(true);
@@ -217,7 +221,7 @@ export default function Venues() {
       {loading ? (
         <EmptyState title="Ranking venues" body="Scoring by distance, cost, availability, and sport suitability." />
       ) : venues.length === 0 ? (
-        <div><EmptyState title="No live venues found" body="Try widening your filters or check back after organisations register venues." /><h2 className="font-display text-xl mt-6 mb-2">Example venues</h2><p className="text-xs text-ink-soft mb-3">Fictional venue cards for comparing sports, facilities and price. They cannot be booked.</p><div className="grid sm:grid-cols-2 gap-3">{sampleVenues.slice(0, 4).map((venue) => <article key={venue.id} className="bg-white rounded-xl p-4 stitch-border"><Badge tone="gold">Sample</Badge><p className="font-semibold mt-2">{venue.name}</p><p className="text-sm text-ink-soft">{venue.sport} · {venue.location} · ₹{venue.pricePerHour}/hour</p><p className="text-xs text-ink-soft">{venue.facilities.join(" · ")}</p></article>)}</div></div>
+        <EmptyState title="No live venues found" body="Try widening your filters or check back after organisations register venues." />
       ) : (
         <div className="grid md:grid-cols-2 gap-5">
           {venues.map((venue) => (
@@ -251,6 +255,12 @@ export default function Venues() {
           ))}
         </div>
       )}
+
+      <section className="mt-8" aria-labelledby="sample-venues-heading">
+        <h2 id="sample-venues-heading" className="font-display text-xl mb-2">Example venues</h2>
+        <p className="text-xs text-ink-soft mb-3">Fictional venues linked to the sample organisations. Prices and availability are illustrative; these cannot be booked.</p>
+        {demoLoading ? <p role="status" className="text-sm text-ink-soft">Loading examples…</p> : demoError ? <p role="status" className="text-sm text-clay-deep">Examples unavailable: {demoError}</p> : sampleVenues.length === 0 ? <p className="text-sm text-ink-soft">No examples fit these filters. Try another sport, area, slot or budget.</p> : <div className="grid sm:grid-cols-2 gap-3">{sampleVenues.map((venue) => <article key={venue.id} className="bg-white rounded-xl p-4 stitch-border"><Badge tone="gold">Sample</Badge><h3 className="font-semibold mt-2">{venue.name}</h3><p className="text-xs text-ink-soft">{venue.orgName}</p><p className="text-sm text-ink-soft">{venue.sport} · {venue.location} · ₹{venue.pricePerHour}/hour</p><p className="text-xs text-ink-soft">{venue.facilities.join(" · ")}</p></article>)}</div>}
+      </section>
 
       <Modal open={!!booking} onClose={() => setBooking(null)} title="Confirm booking">
         {booking && payStep === "review" && (

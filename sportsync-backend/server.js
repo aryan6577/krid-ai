@@ -21,6 +21,7 @@ import {
 import { bookingIdempotencyKey, createOnce } from "./services/idempotencyService.js";
 import { validateOpportunity, validateArticle, validateApplication } from "./services/careerValidationService.js";
 import { calculateStreakFromDates } from "./services/streakMath.js";
+import { buildDemoCatalog } from "./services/demoCatalogService.js";
 
 const app = express();
 app.use(cors());
@@ -1382,6 +1383,17 @@ app.get("/api/health", (req, res) => {
     keyConfigured: Boolean(GROQ_API_KEY),
     supabaseConfigured: Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY),
   });
+});
+
+app.get("/api/demo/catalog", async (_req, res) => {
+  try {
+    if (!requireSupabaseConfig(res)) return;
+    const rows = await supabaseDb("/demo_catalog_entries?select=kind,payload&order=entry_id.asc&limit=100");
+    res.set("Cache-Control", "public, max-age=60");
+    res.json({ catalog: buildDemoCatalog(rows) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || "Could not load sample catalog." });
+  }
 });
 
 app.get("/api/health/cv", async (req, res) => {

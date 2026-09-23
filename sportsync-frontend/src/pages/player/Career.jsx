@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { SectionHeading, Badge, PrimaryButton, EmptyState, Modal } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import { rankCareerOpportunities } from "../../lib/ai";
-import { careerOpportunities as demoOpportunities } from "../../data/career";
 import { api } from "../../lib/api";
 import CareerArticle from "../../components/CareerArticle";
 
@@ -14,7 +13,7 @@ const readCv = (file) => new Promise((resolve, reject) => {
 });
 
 export default function Career() {
-  const { currentPlayer, session, careerRequests, submitCareerRequest } = useApp();
+  const { currentPlayer, session, careerRequests, submitCareerRequest, demoCatalog, demoLoading, demoError } = useApp();
   const token = session.accessToken;
   const [opportunities, setOpportunities] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -41,7 +40,10 @@ export default function Career() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [token]);
-  const ranked = useMemo(() => rankCareerOpportunities(currentPlayer, [...opportunities, ...demoOpportunities.map((item) => ({ ...item, demo: true }))]), [currentPlayer, opportunities]);
+  const ranked = useMemo(() => [
+    ...rankCareerOpportunities(currentPlayer, opportunities),
+    ...demoCatalog.opportunities.map((opportunity) => ({ opportunity, score: null, reasons: [] })),
+  ], [currentPlayer, opportunities, demoCatalog.opportunities]);
 
   const saveArticle = async (event) => {
     event.preventDefault(); setSaving(true); setError(""); setMessage("");
@@ -92,14 +94,16 @@ export default function Career() {
     </section>
     {careerRequests.length > 0 && <section className="mb-7"><h2 className="font-display text-xl mb-2">Career requests on this device</h2><p className="text-xs text-ink-soft mb-3">These prototype requests are local drafts and are not delivered to organisations.</p>{careerRequests.map((item) => <p key={item.id} className="bg-white rounded-xl p-3 stitch-border mb-2">{item.title} · {item.sport}</p>)}</section>}
     <h2 className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-3">Opportunities</h2>
+    {demoLoading && <p role="status" className="text-sm text-ink-soft mb-3">Loading sample opportunities…</p>}
+    {demoError && <p role="status" className="text-sm text-clay-deep mb-3">Sample opportunities unavailable: {demoError}</p>}
     {loading ? <p role="status">Loading career records…</p> : ranked.length === 0 ? <EmptyState title="No opportunities yet" body="Check back when organisations publish new opportunities." /> : <div className="grid sm:grid-cols-2 gap-4">{ranked.map(({ opportunity: item, score, reasons }) => {
       const applied = applications.find((application) => application.opportunityId === item.id);
       return <article key={item.id} className="bg-white rounded-2xl p-5 stitch-border flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2"><h3 className="font-display text-xl">{item.title}</h3><Badge tone={item.demo ? "gold" : "turf"}>{item.demo ? "Sample" : "Published"}</Badge></div>
         <p className="text-sm text-ink-soft">{item.orgName} · {item.location} · {item.sport}</p>{!item.demo && !item.organisationVerified && <p className="text-xs text-clay-deep">Organisation verification pending; check the publisher before sharing additional information.</p>}<p className="text-sm whitespace-pre-wrap">{item.description}</p>
         {item.article && <details className="rounded-xl bg-paper-dim p-3"><summary className="font-semibold text-sm cursor-pointer">Read organisation article</summary><CareerArticle content={item.article} /></details>}
-        <p className="text-xs text-ink-soft">{item.type} · {item.stipend || "Terms on request"} · Deadline {item.deadline} · Indicative match {score}%</p>
-        <p className="text-xs text-ink-soft">{reasons.join(" · ")}</p>
+        <p className="text-xs text-ink-soft">{item.type} · {item.stipend || "Terms on request"} · {item.demo ? "No live deadline" : `Deadline ${item.deadline}`}{!item.demo && ` · Indicative match ${score}%`}</p>
+        {!item.demo && <p className="text-xs text-ink-soft">{reasons.join(" · ")}</p>}
         {applied ? <p className="text-sm font-semibold text-turf">Application {applied.status}</p> : item.demo ? <p className="text-xs text-ink-soft">Sample listing: applications are unavailable.</p> : <PrimaryButton onClick={() => { setSelected(item); setError(""); }} disabled={!profile.emailVerified || !profile.article}>{!profile.emailVerified ? "Confirm email to apply" : !profile.article ? "Save article to apply" : "Apply with CV"}</PrimaryButton>}
       </article>;
     })}</div>}

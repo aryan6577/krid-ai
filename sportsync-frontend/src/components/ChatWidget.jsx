@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Bot, CheckCircle2, MessageCircle, Send, X } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { venues } from "../data/venues";
 import { chatWithAssistant, checkHealth } from "../lib/aiChat";
 import { executeTool } from "../lib/assistantTools";
 import { getQuickReplies } from "../lib/quickReplies";
@@ -16,10 +15,9 @@ export default function ChatWidget() {
     role,
     currentPlayer,
     currentOrganisation,
-    gamesState,
+    demoCatalog,
     friendPlayers,
     fundingOpportunities,
-    careerOpportunities,
     sponsorshipDeals,
     session,
   } = useApp();
@@ -68,15 +66,13 @@ export default function ChatWidget() {
         : { name: currentPlayer.name, sports: currentPlayer.sports, rating: currentPlayer.rating, location: currentPlayer.location },
     organisation:
       role === "organisation" ? { name: currentOrganisation.name, location: currentOrganisation.location } : undefined,
-    venues: venues.map((v) => ({ id: v.id, name: v.name, sport: v.sport, location: v.location, pricePerHour: v.pricePerHour, sample: true })),
-    games: gamesState
-      .filter((g) => g.status === "Open")
-      .map((g) => ({ id: g.id, sport: g.sport, venue: g.venue, date: g.date, time: g.time, capacity: g.capacity, joined: g.participants.length, sample: String(g.id).startsWith("g20") })),
+    venues: demoCatalog.venues.map((v) => ({ id: v.id, name: v.name, sport: v.sport, location: v.location, pricePerHour: v.pricePerHour, sample: true })),
+    games: demoCatalog.games.map((g) => ({ id: g.id, sport: g.sport, venue: g.venue, date: g.date, time: g.time, capacity: g.capacity, joined: g.participants.length, sample: true })),
     friends: friendPlayers
       .filter((f) => f.status === "accepted" && f.player)
       .map((f) => ({ name: f.player.name, sports: f.player.sports })),
     funding: fundingOpportunities.map((o) => ({ id: o.id, provider: o.provider, purpose: o.purpose, amountRange: o.amountRange, deadline: o.deadline, tags: o.tags, sample: true })),
-    career: careerOpportunities.map((o) => ({ id: o.id, title: o.title, orgName: o.orgName, sport: o.sport, minRating: o.minRating, stipend: o.stipend, deadline: o.deadline, sample: String(o.id).startsWith("co") })),
+    career: demoCatalog.opportunities.map((o) => ({ id: o.id, title: o.title, orgName: o.orgName, sport: o.sport, minRating: o.minRating, stipend: o.stipend, deadline: o.deadline, sample: true })),
     sponsorships: sponsorshipDeals.map((d) => ({ id: d.id, brand: d.brand, type: d.type, sport: d.sport, value: d.value, minRating: d.minRating, deadline: d.deadline, sample: true })),
   });
 
@@ -191,13 +187,13 @@ export default function ChatWidget() {
         lastBotText,
         role,
         currentPlayer,
-        venues,
+        venues: demoCatalog.venues,
         friendPlayers,
         funding: fundingOpportunities,
-        career: careerOpportunities,
+        career: demoCatalog.opportunities,
         sponsorships: sponsorshipDeals,
       }),
-    [lastBotText, role, currentPlayer, friendPlayers, fundingOpportunities, careerOpportunities, sponsorshipDeals]
+    [lastBotText, role, currentPlayer, friendPlayers, fundingOpportunities, demoCatalog, sponsorshipDeals]
   );
 
   return (

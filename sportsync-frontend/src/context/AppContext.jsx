@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { currentPlayer as seedCurrentPlayer, players, friendships } from "../data/players";
+import { currentPlayer as seedCurrentPlayer } from "../data/players";
 import { currentOrganisation as seedCurrentOrganisation } from "../data/venues";
 import { games as seedGames, fundingOpportunities as seedFundingOpportunities } from "../data/games";
 import { friendChatSeeds, friendAutoReplies } from "../data/chats";
@@ -9,6 +9,7 @@ import { api } from "../lib/api";
 
 const AppContext = createContext(null);
 const TOKEN_KEY = "krid_access_token";
+const emptyDemoCatalog = { players: [], organisations: [], venues: [], opportunities: [], games: [] };
 
 export function AppProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true);
@@ -20,8 +21,23 @@ export function AppProvider({ children }) {
   const [authed, setAuthed] = useState(Boolean(localStorage.getItem(TOKEN_KEY)));
   const [role, setRole] = useState(null); // "player" | "organisation"
   const [onboarded, setOnboarded] = useState(false);
+  const [demoCatalog, setDemoCatalog] = useState(emptyDemoCatalog);
+  const [demoLoading, setDemoLoading] = useState(true);
+  const [demoError, setDemoError] = useState("");
 
-  const [friendsState, setFriendsState] = useState(friendships);
+  useEffect(() => {
+    if (!session.accessToken) { setDemoLoading(false); return; }
+    let active = true;
+    setDemoLoading(true);
+    setDemoError("");
+    api.getDemoCatalog()
+      .then(({ catalog }) => { if (active) setDemoCatalog(catalog); })
+      .catch((error) => { if (active) setDemoError(error.message || "Could not load examples."); })
+      .finally(() => { if (active) setDemoLoading(false); });
+    return () => { active = false; };
+  }, [session.accessToken]);
+
+  const [friendsState, setFriendsState] = useState([]);
   const [gamesState, setGamesState] = useState(seedGames);
   const [notificationsState, setNotificationsState] = useState([]);
 
@@ -291,9 +307,9 @@ export function AppProvider({ children }) {
     () =>
       friendsState.map((f) => ({
         ...f,
-        player: players.find((p) => p.id === f.playerId),
+        player: demoCatalog.players.find((p) => p.id === f.playerId),
       })),
-    [friendsState]
+    [friendsState, demoCatalog.players]
   );
 
   const currentPlayer = useMemo(
@@ -330,7 +346,10 @@ export function AppProvider({ children }) {
     deleteProfile,
     currentPlayer,
     currentOrganisation,
-    allPlayers: players,
+    demoCatalog,
+    demoLoading,
+    demoError,
+    allPlayers: demoCatalog.players,
     friendsState,
     friendPlayers,
     respondFriendRequest,

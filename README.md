@@ -15,6 +15,10 @@ Apply `sportsync-backend/supabase/migrations/202609230001_career_flow.sql` after
 
 The configured Supabase project currently has email auto-confirmation enabled. That flag alone is not proof that an inbox is controlled by the applicant. Configure the Supabase **Magic Link** email template to include `{{ .Token }}` so `/auth/v1/otp` sends a six-digit code; a player enters that code on Career. The server verifies it with `/auth/v1/verify`, checks the returned Supabase user matches the logged-in account, then stores a proof tied to that email. Changing the account email invalidates the proof. Email delivery depends on Supabase Auth and its SMTP limits. Until the template and migration are configured, career applications remain unavailable rather than claiming verification.
 
+### Fictional demo catalog
+
+Apply `sportsync-backend/supabase/migrations/202609230002_demo_catalog.sql` after the Career migration. It seeds 24 fictional player profiles and 12 fictional organisations, each linked to a sample venue and career listing, plus 10 example games. The examples live in a separate read-only table and do not create Supabase Auth users, bookings, applications, activity, awards, or verified organisations. The web API serves the same catalog to player and organisation pages at `/api/demo/catalog`; sample cards cannot be joined, booked, or applied to. To update the fixture, edit `sportsync-backend/scripts/buildDemoCatalog.mjs`, run it with Node, then add a new additive migration for already deployed databases.
+
 On Windows, run these commands in separate PowerShell terminals after installing dependencies:
 
 

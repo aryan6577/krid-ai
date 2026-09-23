@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { SectionHeading, Badge, PrimaryButton, Modal, EmptyState } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
-import { players as demoPlayers } from "../../data/players";
 import { api } from "../../lib/api";
 import CareerArticle from "../../components/CareerArticle";
 
@@ -9,7 +8,7 @@ const SPORTS = ["Football", "Badminton", "Tennis", "Basketball"];
 const emptyForm = { title: "", sport: "Football", type: "Trial", minRating: 0, stipend: "", location: "", description: "", article: "", deadline: "" };
 
 export default function OrgCareer() {
-  const { session, currentOrganisation, careerRequests } = useApp();
+  const { session, currentOrganisation, careerRequests, demoCatalog, demoLoading, demoError } = useApp();
   const token = session.accessToken;
   const [opportunities, setOpportunities] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -31,7 +30,7 @@ export default function OrgCareer() {
     return () => { active = false; };
   }, [token]);
   const mine = opportunities.filter((item) => item.orgId === currentOrganisation.id);
-  const filtered = useMemo(() => demoPlayers.filter((player) => (sport === "All" || player.sports.includes(sport)) && player.rating >= minRating).sort((a, b) => b.rating - a.rating), [sport, minRating]);
+  const filtered = useMemo(() => demoCatalog.players.filter((player) => (sport === "All" || player.sports.includes(sport)) && player.rating >= minRating).sort((a, b) => b.rating - a.rating), [demoCatalog.players, sport, minRating]);
   const submit = async (event) => {
     event.preventDefault(); setSaving(true); setError(""); setMessage("");
     try {
@@ -62,9 +61,11 @@ export default function OrgCareer() {
           <button type="button" onClick={() => download(item)} className="mt-2 text-sm font-semibold text-turf underline">Download {item.cvName}</button>
         </article>)}</div>}
         <h2 className="font-display text-2xl mt-8 mb-3">Sample player pool</h2>
-        <p className="text-xs text-ink-soft mb-3">Fictional demo profiles. These are not applicant records or verified performance.</p>
+        <p className="text-xs text-ink-soft mb-3">{demoCatalog.players.length} fictional demo profiles from the shared catalog. These are not applicant records or verified performance. Ratings are illustrative.</p>
+        {demoLoading && <p role="status" className="text-sm text-ink-soft mb-3">Loading sample players…</p>}
+        {demoError && <p role="status" className="text-sm text-clay-deep mb-3">Sample players unavailable: {demoError}</p>}
         <div className="flex gap-2 flex-wrap mb-3"><label className="text-sm">Sport <select className="fld ml-2" value={sport} onChange={(event) => setSport(event.target.value)}><option>All</option>{SPORTS.map((name) => <option key={name}>{name}</option>)}</select></label><label className="text-sm">Rating <select className="fld ml-2" value={minRating} onChange={(event) => setMinRating(Number(event.target.value))}>{[0, 1300, 1400, 1500].map((value) => <option key={value} value={value}>{value || "Any"}</option>)}</select></label></div>
-        {filtered.length === 0 ? <EmptyState title="No sample players match" body="Widen your filters." /> : <div className="grid sm:grid-cols-2 gap-3">{filtered.map((player) => <div key={player.id} className="bg-white rounded-xl p-4 stitch-border"><p className="font-semibold">{player.name} <Badge tone="gold">Sample</Badge></p><p className="text-xs text-ink-soft">{player.location} · {player.sports.join(", ")} · Demo rating {player.rating}</p></div>)}</div>}
+        {!demoLoading && !demoError && (filtered.length === 0 ? <EmptyState title="No sample players match" body="Widen your filters." /> : <div className="grid sm:grid-cols-2 gap-3">{filtered.map((player) => <div key={player.id} className="bg-white rounded-xl p-4 stitch-border"><p className="font-semibold">{player.name} <Badge tone="gold">Sample</Badge></p><p className="text-xs text-ink-soft">{player.location} · {player.sports.join(", ")} · Illustrative rating {player.rating}</p></div>)}</div>)}
       </section>
       <aside><h2 className="font-display text-2xl mb-3">Your published roles</h2>{mine.length ? <div className="space-y-3">{mine.map((item) => <article key={item.id} className="bg-white rounded-2xl p-4 stitch-border"><h3 className="font-semibold">{item.title}</h3><p className="text-sm text-ink-soft">{item.sport} · {item.location} · Deadline {item.deadline}</p><Badge tone="turf">{item.status}</Badge>{item.article && <details className="mt-3"><summary className="text-sm font-semibold cursor-pointer">Read organisation article</summary><CareerArticle content={item.article} /></details>}</article>)}</div> : <p className="text-sm text-ink-soft">No roles published from this account yet.</p>}<h2 className="font-display text-xl mt-7 mb-2">Local player request drafts</h2><p className="text-xs text-ink-soft mb-2">Prototype drafts created in this browser session; they are not delivered applications.</p>{careerRequests.length ? careerRequests.map((item) => <p key={item.id} className="text-sm bg-white rounded-xl p-3 stitch-border mb-2">{item.title} · {item.sport} · {item.details}</p>) : <p className="text-sm text-ink-soft">No local request drafts.</p>}</aside>
     </div>

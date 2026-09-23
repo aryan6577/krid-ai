@@ -4,12 +4,11 @@ import { Plus, MapPin, Users } from "lucide-react";
 import { SectionHeading, Badge, PrimaryButton, Modal, EmptyState } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import { api } from "../../lib/api";
-import { games as sampleGames } from "../../data/games";
 
 const SPORTS = ["Football", "Badminton", "Tennis", "Basketball"];
 
 export default function Games() {
-  const { session } = useApp();
+  const { session, demoCatalog, demoLoading, demoError } = useApp();
   const navigate = useNavigate();
   const [games, setGames] = useState([]);
   const [openCreate, setOpenCreate] = useState(false);
@@ -84,7 +83,7 @@ export default function Games() {
       {loading ? (
         <EmptyState title="Loading games" body="Fetching open games and slot-fill counts." />
       ) : games.length === 0 ? (
-        <div><EmptyState title="No live games yet" body="Create the first game or check back once one is posted." /><h2 className="font-display text-xl mt-6 mb-2">Example games</h2><p className="text-xs text-ink-soft mb-3">Fictional sample schedule for exploring sports and venue options. These cannot be joined.</p><div className="grid sm:grid-cols-2 gap-3">{sampleGames.slice(0, 4).map((game) => <article key={game.id} className="bg-white rounded-xl p-4 stitch-border"><Badge tone="gold">Sample</Badge><p className="font-semibold mt-2">{game.sport} · {game.date} · {game.time}</p><p className="text-sm text-ink-soft">{game.venue} · {game.participants.length}/{game.capacity} example players</p></article>)}</div></div>
+        <EmptyState title="No live games yet" body="Create the first game or check back once one is posted." />
       ) : (
         <div className="grid md:grid-cols-2 gap-5">
           {games.map((g) => {
@@ -118,6 +117,12 @@ export default function Games() {
           })}
         </div>
       )}
+
+      <section className="mt-8" aria-labelledby="sample-games-heading">
+        <h2 id="sample-games-heading" className="font-display text-xl mb-2">Example games</h2>
+        <p className="text-xs text-ink-soft mb-3">Fictional schedule linked to sample venues and players. These games cannot be joined and no activity counts toward a streak.</p>
+        {demoLoading ? <p role="status" className="text-sm text-ink-soft">Loading examples…</p> : demoError ? <p role="status" className="text-sm text-clay-deep">Examples unavailable: {demoError}</p> : <div className="grid sm:grid-cols-2 gap-3">{demoCatalog.games.map((game) => <article key={game.id} className="bg-white rounded-xl p-4 stitch-border"><Badge tone="gold">Sample</Badge><h3 className="font-semibold mt-2">{game.sport} · {game.date} · {game.time}</h3><p className="text-sm text-ink-soft">{game.venue} · {game.participants.length}/{game.capacity} example players</p></article>)}</div>}
+      </section>
 
       <Modal open={openCreate} onClose={() => setOpenCreate(false)} title="Create a game">
         <form onSubmit={submit} className="space-y-3">

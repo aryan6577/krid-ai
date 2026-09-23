@@ -7,7 +7,7 @@ import { api } from "../../lib/api";
 const SPORTS = ["Football", "Badminton", "Tennis", "Basketball"];
 
 export default function Matchmaking() {
-  const { currentPlayer, session, pushNotification } = useApp();
+  const { currentPlayer, session, pushNotification, demoCatalog, demoLoading, demoError } = useApp();
   const [sport, setSport] = useState(currentPlayer.sports[0] || SPORTS[0]);
   const [candidates, setCandidates] = useState([]);
   const [index, setIndex] = useState(0);
@@ -185,6 +185,11 @@ export default function Matchmaking() {
           )}
         </div>
       </div>
+      <section className="mt-8" aria-labelledby="sample-players-heading">
+        <h2 id="sample-players-heading" className="font-display text-xl mb-2">Example player community</h2>
+        <p className="text-xs text-ink-soft mb-3">Fictional profiles for exploring the {sport} community. They are not matchmaking candidates and cannot receive requests. Ratings are illustrative.</p>
+        {demoLoading ? <p role="status" className="text-sm text-ink-soft">Loading examples…</p> : demoError ? <p role="status" className="text-sm text-clay-deep">Examples unavailable: {demoError}</p> : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{demoCatalog.players.filter((player) => player.sports.includes(sport)).map((player) => <article key={player.id} className="bg-white rounded-xl p-4 stitch-border"><Badge tone="gold">Sample</Badge><h3 className="font-semibold mt-2">{player.name}</h3><p className="text-xs text-ink-soft">{player.location} · {player.skill[sport]} · Illustrative rating {player.rating}</p></article>)}</div>}
+      </section>
     </div>
   );
 }

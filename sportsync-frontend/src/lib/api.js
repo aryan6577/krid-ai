@@ -22,6 +22,7 @@ async function request(path, { token, ...options } = {}) {
 }
 
 export const api = {
+  getDemoCatalog: () => request("/api/demo/catalog"),
   register: (payload) => request("/api/auth/register", { method: "POST", body: payload }),
   login: (payload) => request("/api/auth/login", { method: "POST", body: payload }),
   me: (token) => request("/api/me", { token }),
