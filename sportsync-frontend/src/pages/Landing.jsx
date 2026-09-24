@@ -46,7 +46,17 @@ export default function Landing() {
                 I already play
               </GhostButton>
             </div>
-            <Link to="/demo" className="inline-flex items-center gap-1 text-sm font-semibold text-gold underline mt-5">Explore the sample community <ArrowRight size={15} /></Link>
+            <div className="mt-5 flex flex-col sm:flex-row items-start gap-3 sm:gap-5">
+              <Link to="/demo" className="inline-flex items-center gap-1 text-sm font-semibold text-gold underline">Explore the sample community <ArrowRight size={15} /></Link>
+              <a
+                href="https://krid-web-production.up.railway.app/"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-white/85 underline decoration-white/70 underline-offset-4 hover:text-gold hover:decoration-gold"
+              >
+                Open live app <ArrowRight size={15} />
+              </a>
+            </div>
           </div>
 
           {/* Illustrative discovery card; no real person's activity or match result. */}
