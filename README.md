@@ -1,65 +1,131 @@
 # Krid.ai
 
-Krid.ai is a responsive sports prototype with a React app, Express API, Supabase data, and a Python YOLOv8-Pose service. Player navigation is organised around **Home**, **Play**, **Scholarships**, and **Profile**. Play contains games, matchmaking, venues, friends, training, and performance.
+### Find your people. Get in the game. Keep getting better.
 
-## Local setup
+Krid.ai is a responsive sports platform prototype that connects the parts of an athlete's journey: finding teammates, organising games, discovering places to play, training with camera feedback, tracking progress, and exploring opportunities. Organisations have their own workspace for venues, bookings, fundraising, and recruitment.
 
-1. Configure `sportsync-backend/.env` from `.env.example` with your own Supabase and optional provider keys. Apply the SQL migrations in `sportsync-backend/supabase/migrations` to your Supabase project.
-2. Install Python dependencies from `sportsync-cv-service/requirements.txt`. Set the same `KRID_CV_API_KEY` in the CV service environment and backend `.env`. Start the CV service with `uvicorn app.main:app --host 127.0.0.1 --port 8001` from `sportsync-cv-service`.
-3. Start the API from `sportsync-backend` with `npm install` and `npm start` (port 5001).
-4. Start the web app from `sportsync-frontend` with `npm install` and `npm run dev` (port 5174).
+**Built with:** React · Vite · Tailwind CSS · Express · Supabase · FastAPI · OpenCV · YOLOv8-Pose
 
-### Career migration and email proof
+> **Try it first:** Open `/demo` for a public preview of the fictional community. For interactive flows, create a Player account and follow the [judge walkthrough](#judge-walkthrough).
 
-Apply `sportsync-backend/supabase/migrations/202609230001_career_flow.sql` after the earlier migrations. It adds published organisation roles, player and organisation Markdown articles, private CV applications, and email-code proofs. The API stores CVs up to 750 KB as private database text and only returns them to the posting organisation after checking its account role. Existing player and organisation records are unchanged.
+## What you can do
 
-The configured Supabase project currently has email auto-confirmation enabled. That flag alone is not proof that an inbox is controlled by the applicant. Configure the Supabase **Magic Link** email template to include `{{ .Token }}` so `/auth/v1/otp` sends a six-digit code; a player enters that code on Career. The server verifies it with `/auth/v1/verify`, checks the returned Supabase user matches the logged-in account, then stores a proof tied to that email. Changing the account email invalidates the proof. Email delivery depends on Supabase Auth and its SMTP limits. Until the template and migration are configured, career applications remain unavailable rather than claiming verification.
-
-### Fictional demo catalog
-
-Apply `sportsync-backend/supabase/migrations/202609230002_demo_catalog.sql`, `202609230003_demo_catalog_alignment.sql`, and `202609230004_interactive_demo_records.sql` after the Career migration. They seed 24 fictional player profiles, 12 fictional organisations, 12 venues, and 10 example games. The final migration copies interactive examples into the primary `players`, `organisations`, `venues`, `games`, and `game_participants` tables with `is_demo` and stable `demo_catalog_id` markers; existing records keep `is_demo=false`. It does not create Supabase Auth users, applications, activity, awards, or verified organisations. The separate catalog remains the source for the public `/demo` preview and non-interactive career examples.
-
-### Judge walkthrough with persisted demo records
-
-Create a Player account and complete onboarding with Football, Badminton, Tennis, or Basketball. In **Play → Matchmaking**, accept a clearly labelled demo player for the chosen sport. The accepted demo teammate appears in **Play → Friends** immediately; real player connections still require the other player to accept. In **Play → Games**, join a labelled example game or create a new game and choose a named demo venue from the database. On a game you created at a demo venue, add an accepted demo teammate from the game detail page. In **Play → Venues**, choose a demo venue and save an example booking; it appears under your saved choices. A demo booking does not hold actual venue time or take payment. Real venues retain the existing payment flow. Sample organisations and opportunity examples have no login credentials, and sample career listings cannot accept applications.
-
-To update the fixture, edit `sportsync-backend/scripts/buildDemoCatalog.mjs`, run it with Node, then add an additive migration for deployed databases. Keep demo records flagged and avoid using them as evidence of real player performance or venue availability.
-
-On Windows, run these commands in separate PowerShell terminals after installing dependencies:
-
-
-| Directory | Command |
+| Journey | Experience |
 | --- | --- |
-| `sportsync-cv-service` | `$env:YOLO_CONFIG_DIR=(Get-Location).Path; .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001` |
-| `sportsync-backend` | `npm start` |
-| `sportsync-frontend` | `npm run dev` |
+| **Find your team** | See ranked player matches with a compatibility score and reasons based on sport, skill, distance, availability, and connection history. Send and accept friend requests. |
+| **Make a game happen** | Create or join games, manage a roster, balance teams by rating, and calculate a simple per-player expense split. |
+| **Find a place to play** | Browse venues ranked by fit, inspect weather context, and make a booking. Real venue payments use Razorpay test mode when configured; fictional demo venues save example bookings without reserving time or charging money. |
+| **Train with feedback** | Choose an exercise or sport drill, enable the camera, and see detected joints, movement cues, live progress, and a saved evaluation. |
+| **See your progress** | Review recent sessions, performance views, and a timezone-aware activity streak that counts at most one qualifying day per local date. |
+| **Discover your next step** | Explore scholarships, grants, sponsorship examples, and career roles. Ranking shows the factors behind a match; published organisation roles support verified-email applications. |
+| **Run a sports organisation** | Manage venues and availability, review bookings, publish career opportunities, and explore fundraising and sponsorship workflows. |
 
-Open `http://127.0.0.1:5174`. Use a Player account to see the Home, Play, Scholarships and Profile tabs. To test Career end to end, create an Organisation account, publish a role, then use a different Player account with a configured email OTP to save an article and apply with a PDF or DOCX CV. No real submission was made during this audit.
+### The experience in one pass
 
-Camera access requires HTTPS or localhost. The browser asks permission only when the player chooses **Enable camera**. A session lasts up to 60 seconds and captures resized JPEG frames at up to 5 fps. The first frame is sent immediately; subsequent requests send up to three queued frames to the private OpenCV/YOLO pose service. Capture skips frames when the six-frame queue is full. During exercise sessions, the preview draws detected joints and shows live reps, set progress, joint angle or plank hold time, and a movement cue. These are estimates from returned keypoints; the existing quality gate and server rule engine compute and save the final result when the session ends. Tutorial sessions continue to show pose and framing feedback. Raw continuous video is not saved by this flow. The **Tracking speed details** panel exposes capture and JPEG time, request time, CV round trip, inference and UI timing. Cloud round trips can still make pose feedback slower than the video preview.
+```text
+Player onboarding → Matchmaking → Friends → Games → Venues
+                                     ↓
+                         Camera training → Performance
+                                     ↓
+                    Scholarships · Sponsorships · Career
+```
 
-Weather on the player home and venue pages uses [Open-Meteo](https://open-meteo.com/en/docs) forecasts for the player's saved coordinates or the selected venue's coordinates. For a player-entered area and city, the server resolves both parts with Open-Meteo geocoding and chooses an area match near the city. If only the city resolves, the widget labels the forecast approximate. Missing measurements and provider outages show an unavailable state; cached weather is labelled stale.
+The main Player navigation is **Home**, **Play**, **Scholarships**, and **Profile**. **Play** brings together matchmaking, games, venues, friends, training, and performance. Organisation accounts have a separate dashboard and management views.
 
-### Daily streak rule
+## Why the technical choices matter
 
-One completed exercise earns one streak day in the player's saved timezone. Automatic completion requires reaching the selected rep/set or plank-hold target with sufficient camera quality throughout the analysed session. A target detected with limited quality can count only after the player explicitly confirms completion; incomplete sessions do not count. Additional qualifying exercises, tutorials or eligible match results on the same local date do not add another day. Complete a qualifying activity on consecutive dates to extend the streak. Today stays open until the day ends; if a full day is missed, the current streak resets. Correcting a completed session to incomplete removes its event and recalculates the streak from the remaining activity dates.
+- **Explainable recommendations.** Matchmaking, venue, funding, career, and adjacent-sport suggestions use weighted rules or attribute matching and expose reasons. A player can make their own choice; a score is guidance, not a claim of predicted success.
+- **Pose detection with accountable results.** The browser sends bounded, resized JPEG frame batches through the Express API to a private Python service. OpenCV and YOLOv8-Pose return 17-keypoint pose data; server-side exercise and drill rules decide the final result. This flow does not save a continuous raw video stream.
+- **Activity that earns its streak.** A completed exercise, tutorial, or eligible match can count for a local calendar day. Exercise completion must meet the target and camera-quality rules; limited-quality target detection needs the player's explicit confirmation. Corrections recalculate the streak.
+- **Bookings with explicit payment state.** Real venue bookings and Razorpay test orders are verified on the server, with idempotency keys for retries. Missing payment credentials leave a booking pending rather than presenting it as paid.
+- **Career applications with email proof.** An applicant verifies a six-digit Supabase email code before applying. PDF or DOCX CVs up to 750 KB are stored privately and returned only to the posting organisation after an account-role check. Email changes invalidate the proof.
+- **Optional conversational help.** The Express API can use Groq to answer sports questions and prepare in-app proposals. Creating a proposed match requires the player's confirmation; provider-backed chat is optional.
 
-The first YOLO run may need to download the configured pose weights. For offline deployments, set `KRID_CV_MODEL_PATH` to a local weights file. If the CV service is unavailable, training shows an error and does not invent an evaluation.
+## Judge walkthrough
 
-The live counter follows the joint-angle and movement-stage approach in [Nicholas Renotte's MediaPipe gym tracker tutorial](https://www.youtube.com/watch?v=06TE_U21FK4). It uses the app's existing [Ultralytics 17-keypoint pose output](https://docs.ultralytics.com/tasks/pose/) and exercise thresholds, so no second pose model is needed in the browser.
+These steps use database-backed, **clearly labelled fictional records** so the interactive journey can be tried without waiting for another participant.
+
+1. Open `/demo` to preview the sample community. Create a **Player** account and complete onboarding with Football, Badminton, Tennis, or Basketball.
+2. Go to **Play → Matchmaking**. Inspect a compatibility breakdown and accept a demo player for your sport. That teammate appears in **Friends** immediately; connections between real players still require the other person's acceptance.
+3. In **Play → Games**, join an example game or create one. Choose a named demo venue, then add an accepted demo teammate to a game you created there.
+4. In **Play → Venues**, save an example booking at a demo venue. It appears in your saved choices and does not hold actual venue time or take payment.
+5. In **Play → Train**, try an exercise or a Cricket/Football tutorial drill. Grant camera permission when prompted, then inspect the live pose overlay, movement feedback, final result, and **Performance** streak.
+6. In **Scholarships**, explore funding and sponsorship examples. To test **Career** end to end, create a separate **Organisation** account, publish a role, and apply from the Player account after configuring email OTP as described below.
+
+The demo catalog contains **24 fictional players, 12 fictional organisations, 12 venues, and 10 example games**. Its migrations add stable `is_demo` and `demo_catalog_id` markers. Demo profiles have no Supabase Auth accounts; demo organisations are not verified, and sample career listings cannot receive applications. The public `/demo` view and non-interactive career examples use the separate sample catalog. The fixture does not create applications, awards, or real performance history.
+
+## Architecture and stack
+
+| Layer | Technologies | Responsibility |
+| --- | --- | --- |
+| Web app | React 19, Vite, React Router, Tailwind CSS, Recharts | Responsive player and organisation experiences, charts, camera capture, and recommendation explanations |
+| API | Node.js, Express | Authenticated workflows, booking/payment rules, exercise evaluation, streaks, career applications, and private service bridge |
+| Data and identity | Supabase Auth + Postgres | Accounts, profiles, games, venues, bookings, activity, career records, and demo fixtures |
+| Pose service | Python, FastAPI, OpenCV, Ultralytics YOLOv8-Pose | Frame decoding and keypoint inference behind a service key |
+| External context | Open-Meteo, OSRM; optional Groq, SerpAPI, Razorpay test mode | Weather/geocoding, advisory travel estimates, chat, attributed search links, and test payments |
+
+```text
+Browser (React)
+    │ authenticated API requests + sampled camera frames
+    ▼
+Express API ──────────────► Supabase Auth + Postgres
+    │
+    ├──► Private FastAPI pose service ──► YOLOv8-Pose keypoints
+    └──► Optional external providers
+```
+
+The browser never calls the pose service directly. Weather and travel estimates are advisory: provider outages do not block venue discovery or booking. Unavailable measurements are shown as unavailable, and cached weather is labelled stale.
+
+## Run locally
+
+### 1. Configure Supabase and the API
+
+Copy `sportsync-backend/.env.example` to `sportsync-backend/.env`. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` for your project. Set `CV_SERVICE_URL=http://127.0.0.1:8001` and choose a `KRID_CV_API_KEY` shared with the pose service. Groq, SerpAPI, and Razorpay test keys are optional for their respective features.
+
+Apply the SQL files in `sportsync-backend/supabase/migrations` **in filename order**. The Career migration is `202609230001_career_flow.sql`; the three demo catalog migrations follow it. Without the Career migration and configured email-code delivery, applications remain unavailable.
+
+### 2. Start the three services
+
+Install dependencies in each service directory. On Windows, run these in **separate PowerShell terminals**:
+
+| Terminal | Directory | Commands |
+| --- | --- | --- |
+| Pose service | `sportsync-cv-service` | `python -m venv .venv`<br>`./.venv/Scripts/python.exe -m pip install -r requirements.txt`<br>`$env:KRID_CV_API_KEY="same-key-as-backend"`<br>`$env:YOLO_CONFIG_DIR=(Get-Location).Path`<br>`./.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8001` |
+| API | `sportsync-backend` | `npm install`<br>`npm start` |
+| Web app | `sportsync-frontend` | `npm install`<br>`npm run dev` |
+
+Open **http://127.0.0.1:5174**. The API runs on port **5001** and the pose service on **8001**. The pose service uses the bundled `yolov8n-pose.pt` weights; `KRID_CV_MODEL_PATH` can point to another local weights file. If the pose service is unavailable, training reports an error instead of inventing an evaluation.
+
+### 3. Enable email-code applications
+
+Configure the Supabase **Magic Link** email template to include `{{ .Token }}` so `/auth/v1/otp` delivers a six-digit code. The player enters that code in Career; the server verifies it with `/auth/v1/verify`, checks that the returned Supabase user matches the logged-in account, and stores proof for that email. Supabase Auth and SMTP limits govern delivery. Email auto-confirmation alone does not establish inbox control.
+
+## Camera and data notes
+
+Camera access requires **localhost or HTTPS** and begins only after **Enable camera**. Sessions run for up to 60 seconds. Capture samples resized JPEG frames at up to 5 fps, sends the first frame immediately, batches later frames, and skips capture if the queue is full. During exercise sessions, the preview shows detected joints, reps or hold time, set progress, joint angle, and a cue. Those live values are estimates from keypoints; the server's quality gate and rule engine save the final evaluation. Tutorial sessions show pose, framing, and checkpoint feedback.
+
+The **Tracking speed details** panel separates capture/JPEG, request, CV round trip, inference, and UI timings. Network latency can make pose feedback trail the camera preview.
+
+The live counter uses the joint-angle and movement-stage approach described in [Nicholas Renotte's gym tracker tutorial](https://www.youtube.com/watch?v=06TE_U21FK4), adapted to the app's [Ultralytics 17-keypoint pose output](https://docs.ultralytics.com/tasks/pose/) and exercise thresholds. Scholarship and opportunity examples include curated or demo entries; applicants should check eligibility and deadlines with the provider.
 
 ## Checks
 
-- Frontend: `npm run build` and `npm run lint`
-- Backend: `npm test`
-- CV service: install `sportsync-cv-service/requirements-dev.txt`, then run `python -m pytest -q`
+| Service | Command |
+| --- | --- |
+| Frontend | `npm run build` and `npm run lint` |
+| Backend | `npm test` |
+| CV service | Install `requirements-dev.txt`, then run `python -m pytest -q` |
 
-See each service's README for details. Scholarship and opportunity data in this prototype includes curated/demo entries; users should verify eligibility and deadlines with each provider.
+See the [frontend](sportsync-frontend/README.md), [backend](sportsync-backend/README.md), and [pose service](sportsync-cv-service/README.md) READMEs for service-level details.
 
-## Deployment (Railway)
+## Deploy on Railway
 
-The root `Dockerfile` builds the React app and serves it from the Express API on one HTTPS origin. Create a Railway service from the repository root for this Dockerfile, expose its service domain, and set health check `/api/health`. Create a second service from `sportsync-cv-service` using its Dockerfile; keep this service private, listening on port 8001, with health check `/healthz`. The CV image includes the pinned local YOLO pose weights. The public service passes frame batches to the private service; the browser never calls the CV service directly.
+The root `Dockerfile` builds the React app and serves it from Express on one HTTPS origin. Deploy that Dockerfile as the public service, expose its domain, and use `/api/health` as its health check. Deploy `sportsync-cv-service/Dockerfile` as a **private** service on port 8001 with `/healthz` as its health check. The CV image includes local pose weights.
 
-On the public service, set `PORT=5001`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY` if chat is desired, optional Razorpay test keys, and `KRID_CV_API_KEY`. Set `CV_SERVICE_URL` to `http://${{<cv-service-name>.RAILWAY_PRIVATE_DOMAIN}}:8001`, replacing the service name with the actual Railway service name. On the CV service, set the same `KRID_CV_API_KEY` and `KRID_CV_REQUIRE_HTTPS=false` because the service is reachable only over Railway's private network. Keep all secrets in Railway variables; `.env` files are excluded from Git and Docker builds.
+Set `PORT=5001`, the Supabase variables, and `KRID_CV_API_KEY` on the public service. Add `GROQ_API_KEY` for chat and Razorpay **test** keys only if using those flows. Set `CV_SERVICE_URL` to `http://${{<cv-service-name>.RAILWAY_PRIVATE_DOMAIN}}:8001`, replacing the placeholder with your Railway service name. Set the same `KRID_CV_API_KEY` on the private CV service and `KRID_CV_REQUIRE_HTTPS=false` for Railway's private network.
 
-Apply the SQL migrations, including the Career migration, to Supabase before trying account and Career flows. Configure the email OTP template as described above. A live deployment needs real Supabase and CV variables; a static-only publish would leave login and camera evaluation broken.
+Apply the SQL migrations and configure the Supabase email template before testing Career. Keep secrets in Railway variables; `.env` files are excluded from Git and Docker builds. The deployment needs live Supabase and CV services for login and camera evaluation.
+
+---
+
+**Krid.ai:** one place to find a game, build a team, train with feedback, and take the next step in sport.
