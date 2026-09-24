@@ -3,11 +3,8 @@
 // Demo career profile ("small blog" about the player) shown on the player's Career page.
 // Kept in sync in spirit with the contact email used on the Profile page.
 export const defaultCareerProfile = {
-  email: "aditya.rao@example.com",
-  blog:
-    "Competitive footballer and evening shuttler based in Koramangala, Bengaluru. Currently on a 6-day activity " +
-    "streak with a 1487 rating. Looking to move from weekend leagues into a structured academy or semi-pro " +
-    "programme, and open to coaching-track opportunities on the badminton side.",
+  email: "",
+  blog: "",
 };
 
 // Opportunities can come pre-seeded from organisations, or be added live by an organisation
@@ -88,4 +85,6 @@ export const careerOpportunities = [
     deadline: "2026-11-20",
     tags: ["badminton", "youth", "scholarship"],
   },
+  { id: "co6", orgId: "sample-o5", orgName: "Example Community Club", title: "Community Basketball Session Leader", sport: "Basketball", type: "Part-time", minRating: 0, stipend: "Terms to be confirmed", location: "Indiranagar, Bengaluru", description: "Sample role for leading weekend beginner sessions, setting up drills, and supporting new players. Contact and eligibility details would need verification by a real publisher.", deadline: "2026-12-01", tags: ["basketball", "community"], demo: true },
+  { id: "co7", orgId: "sample-o6", orgName: "Example Tennis Academy", title: "Tennis Practice Assistant", sport: "Tennis", type: "Internship", minRating: 0, stipend: "Terms to be confirmed", location: "Whitefield, Bengaluru", description: "Sample internship supporting supervised practice sessions and court setup. The academy, terms, and eligibility are fictional and cannot accept applications.", deadline: "2026-12-15", tags: ["tennis", "internship"], demo: true },
 ];

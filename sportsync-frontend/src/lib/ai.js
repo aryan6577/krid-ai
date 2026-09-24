@@ -1,5 +1,4 @@
-// Transparent weighted-scoring "AI" logic for the prototype, matching SRS §7.
-// Real system would swap these for a learned model; the interface/shape stays the same.
+// Transparent weighted-scoring helpers for prototype modules that are still mock/local.
 
 const R_EARTH_KM = 6371;
 
@@ -13,94 +12,6 @@ export function distanceKm(a, b) {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
   return R_EARTH_KM * 2 * Math.asin(Math.sqrt(h));
-}
-
-const SKILL_ORDER = ["Beginner", "Intermediate", "Advanced"];
-
-// SRS §7.1 — Matchmaking factor weights
-export const MATCH_WEIGHTS = {
-  sport: 0.25,
-  skill: 0.25,
-  availability: 0.2,
-  location: 0.15,
-  competitive: 0.1,
-  form: 0.05,
-};
-
-export function compatibilityScore(me, candidate, sport) {
-  const reasons = [];
-
-  // Sport compatibility
-  const sportMatch = candidate.sports.includes(sport) ? 1 : 0;
-  if (sportMatch) reasons.push(`Both play ${sport}`);
-
-  // Skill compatibility — closer skill tiers score higher
-  const mySkillIdx = SKILL_ORDER.indexOf(me.skill?.[sport] ?? "Intermediate");
-  const theirSkillIdx = SKILL_ORDER.indexOf(candidate.skill?.[sport] ?? "Intermediate");
-  const skillGap = Math.abs(mySkillIdx - theirSkillIdx);
-  const skillScore = Math.max(0, 1 - skillGap / 2);
-  if (skillGap === 0) reasons.push(`Same ${sport} skill tier`);
-  else if (skillGap === 1) reasons.push("Adjacent skill level — competitive game likely");
-
-  // Availability overlap
-  const overlap = candidate.availability.filter((a) => me.availability.includes(a));
-  const availScore = overlap.length > 0 ? Math.min(1, overlap.length / 2) : 0;
-  if (overlap.length > 0) reasons.push(`Free during ${overlap[0]}`);
-
-  // Location / travel distance
-  const km = distanceKm(me, candidate);
-  const locationScore = Math.max(0, 1 - km / 15);
-  if (km <= 3) reasons.push("Very close by (under 3 km)");
-  else if (km <= 8) reasons.push(`${km.toFixed(1)} km away`);
-
-  // Competitive preference match
-  const compMatch = candidate.competitivePreference === me.competitivePreference ? 1 : 0.5;
-  if (compMatch === 1) reasons.push(`Prefers ${candidate.competitivePreference.toLowerCase()} play, like you`);
-
-  // Recent performance / consistency
-  const formScore = candidate.recentForm ?? 0.5;
-
-  const total =
-    sportMatch * MATCH_WEIGHTS.sport +
-    skillScore * MATCH_WEIGHTS.skill +
-    availScore * MATCH_WEIGHTS.availability +
-    locationScore * MATCH_WEIGHTS.location +
-    compMatch * MATCH_WEIGHTS.competitive +
-    formScore * MATCH_WEIGHTS.form;
-
-  return {
-    score: Math.round(total * 100),
-    reasons: reasons.slice(0, 3),
-    distanceKm: km,
-  };
-}
-
-export function rankCandidates(me, candidates, sport) {
-  return candidates
-    .filter((c) => c.sports.includes(sport))
-    .map((c) => ({ player: c, ...compatibilityScore(me, c, sport) }))
-    .sort((a, b) => b.score - a.score);
-}
-
-// SRS §7.2 — AI Team Balancing: greedy snake-draft by rating to minimise strength gap
-export function balanceTeams(participants) {
-  const sorted = [...participants].sort((a, b) => b.rating - a.rating);
-  const teamA = [];
-  const teamB = [];
-  let sumA = 0;
-  let sumB = 0;
-  sorted.forEach((p) => {
-    if (sumA <= sumB) {
-      teamA.push(p);
-      sumA += p.rating;
-    } else {
-      teamB.push(p);
-      sumB += p.rating;
-    }
-  });
-  const maxSum = Math.max(sumA, sumB, 1);
-  const balanceScore = Math.round((1 - Math.abs(sumA - sumB) / maxSum) * 100);
-  return { teamA, teamB, sumA, sumB, balanceScore };
 }
 
 // SRS §7.3 — AI Venue Recommendation
@@ -169,20 +80,4 @@ export function rankCareerOpportunities(player, opportunities) {
 // AI Sponsorship Matching — same shape as career matching, applied to brand sponsorship deals.
 export function rankSponsorshipDeals(player, deals) {
   return rankCareerOpportunities(player, deals);
-}
-
-// FR-24 — Streak calculation from qualifying activity dates (consecutive days)
-export function computeStreak(dates) {
-  if (!dates.length) return { current: 0, longest: 0 };
-  const sorted = [...new Set(dates)].sort();
-  let longest = 1;
-  let run = 1;
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = new Date(sorted[i - 1]);
-    const cur = new Date(sorted[i]);
-    const diffDays = Math.round((cur - prev) / 86400000);
-    run = diffDays === 1 ? run + 1 : 1;
-    longest = Math.max(longest, run);
-  }
-  return { current: run, longest };
 }

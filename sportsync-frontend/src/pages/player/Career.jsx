@@ -1,228 +1,126 @@
-import { useMemo, useState } from "react";
-import { Briefcase, Mail, Pencil, Sparkles, Plus, CheckCheck, Clock } from "lucide-react";
-import { SectionHeading, Badge, PrimaryButton, GhostButton, EmptyState, Modal } from "../../components/ui";
+import { useEffect, useMemo, useState } from "react";
+import { SectionHeading, Badge, PrimaryButton, EmptyState, Modal } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import { rankCareerOpportunities } from "../../lib/ai";
+import { api } from "../../lib/api";
+import CareerArticle from "../../components/CareerArticle";
+
+const readCv = (file) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onerror = () => reject(new Error("Could not read the CV file."));
+  reader.onload = () => resolve(String(reader.result).split(",")[1]);
+  reader.readAsDataURL(file);
+});
 
 export default function Career() {
-  const {
-    currentPlayer,
-    careerOpportunities,
-    appliedCareerIds,
-    applyToCareer,
-    careerRequests,
-    submitCareerRequest,
-    careerProfile,
-    updateCareerProfile,
-  } = useApp();
-
-  const [editOpen, setEditOpen] = useState(false);
-  const [draft, setDraft] = useState(careerProfile);
-
+  const { currentPlayer, session, careerRequests, submitCareerRequest, demoCatalog, demoLoading, demoError } = useApp();
+  const token = session.accessToken;
+  const [opportunities, setOpportunities] = useState([]);
+  const [applications, setApplications] = useState([]);
+  const [profile, setProfile] = useState({ article: "", email: "", emailVerified: false });
+  const [article, setArticle] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [statement, setStatement] = useState("");
+  const [cv, setCv] = useState(null);
+  const [emailCode, setEmailCode] = useState("");
   const [requestOpen, setRequestOpen] = useState(false);
-  const [request, setRequest] = useState({ title: "", sport: currentPlayer.sports[0] || "", details: "" });
-  const [justSubmitted, setJustSubmitted] = useState(false);
+  const [request, setRequest] = useState({ title: "", sport: "Football", details: "" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    Promise.all([api.getCareerOpportunities(token), api.getCareerProfile(token), api.getCareerApplications(token)])
+      .then(([list, own, applied]) => {
+        if (!active) return;
+        setOpportunities(list.opportunities || []); setProfile(own); setArticle(own.article || ""); setApplications(applied.applications || []);
+      }).catch((err) => { if (active) setError(err.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [token]);
+  const ranked = useMemo(() => [
+    ...rankCareerOpportunities(currentPlayer, opportunities),
+    ...demoCatalog.opportunities.map((opportunity) => ({ opportunity, score: null, reasons: [] })),
+  ], [currentPlayer, opportunities, demoCatalog.opportunities]);
 
-  const ranked = useMemo(() => rankCareerOpportunities(currentPlayer, careerOpportunities), [currentPlayer, careerOpportunities]);
-
-  const saveProfile = () => {
-    updateCareerProfile(draft);
-    setEditOpen(false);
+  const saveArticle = async (event) => {
+    event.preventDefault(); setSaving(true); setError(""); setMessage("");
+    try {
+      await api.saveCareerProfile(token, { article });
+      setProfile((old) => ({ ...old, article }));
+      setMessage("Career article saved.");
+    } catch (err) { setError(err.message); } finally { setSaving(false); }
+  };
+  const apply = async (event) => {
+    event.preventDefault(); setSaving(true); setError(""); setMessage("");
+    try {
+      if (!cv || cv.size > 750 * 1024) throw new Error("Choose a PDF or DOCX CV no larger than 750 KB.");
+      const type = cv.type || (cv.name.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+      const result = await api.applyToCareerOpportunity(token, selected.id, { statement, cv: { name: cv.name, type, base64: await readCv(cv) } });
+      setApplications((old) => [result.application, ...old]); setSelected(null); setStatement(""); setCv(null);
+      setMessage("Application received. Your verified account email and CV were saved privately.");
+    } catch (err) { setError(err.message); } finally { setSaving(false); }
+  };
+  const requestCode = async () => {
+    setError("");
+    try { const result = await api.requestCareerEmailProof(token); setMessage(result.message); }
+    catch (err) { setError(err.message); }
+  };
+  const verifyCode = async (event) => {
+    event.preventDefault(); setError("");
+    try { const result = await api.verifyCareerEmailProof(token, emailCode); setProfile((old) => ({ ...old, ...result })); setEmailCode(""); setMessage("Account email verified for career applications."); }
+    catch (err) { setError(err.message); }
   };
 
-  const handleRequestSubmit = (e) => {
-    e.preventDefault();
-    submitCareerRequest(request);
-    setRequestOpen(false);
-    setRequest({ title: "", sport: currentPlayer.sports[0] || "", details: "" });
-    setJustSubmitted(true);
-    setTimeout(() => setJustSubmitted(false), 4000);
-  };
-
-  return (
-    <div>
-      <SectionHeading
-        eyebrow="Career Module"
-        title="Career opportunities"
-        action={
-          <PrimaryButton className="flex items-center gap-2" onClick={() => setRequestOpen(true)}>
-            <Plus size={16} /> Raise a career request
-          </PrimaryButton>
-        }
-      />
-      <p className="text-sm text-ink-soft max-w-2xl mb-6">
-        Opportunities below are AI-ranked against your sports and current rating — a match, not a guaranteed
-        selection.
-      </p>
-
-      {justSubmitted && (
-        <div className="mb-6 bg-turf-light text-turf-deep rounded-xl px-4 py-3 text-sm flex items-center gap-2">
-          <CheckCheck size={16} /> Your career request was submitted and is now under review.
-        </div>
-      )}
-
-      {/* Small "blog" about the player, with contact email */}
-      <div className="bg-white rounded-2xl p-6 stitch-border mb-8">
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div className="flex items-center gap-3">
-            <span className="w-11 h-11 rounded-full bg-gold text-turf-deep font-display text-lg flex items-center justify-center shrink-0">
-              {currentPlayer.avatar}
-            </span>
-            <div>
-              <p className="font-display text-xl tracking-wide">{currentPlayer.name}</p>
-              <p className="text-xs text-ink-soft flex items-center gap-1.5 mt-0.5">
-                <Mail size={12} /> {careerProfile.email}
-              </p>
-            </div>
-          </div>
-          <GhostButton
-            className="!px-4 !py-2 text-sm flex items-center gap-1.5 shrink-0"
-            onClick={() => {
-              setDraft(careerProfile);
-              setEditOpen(true);
-            }}
-          >
-            <Pencil size={14} /> Edit
-          </GhostButton>
-        </div>
-        {!editOpen ? (
-          <p className="text-sm text-ink-soft max-w-2xl">{careerProfile.blog}</p>
-        ) : (
-          <div className="space-y-3">
-            <textarea
-              className="w-full px-4 py-2.5 rounded-xl border border-ink/15 bg-white focus:outline-none focus:ring-2 focus:ring-turf text-sm"
-              rows={4}
-              value={draft.blog}
-              onChange={(e) => setDraft({ ...draft, blog: e.target.value })}
-              placeholder="A short blog about yourself — sports, goals, what you're looking for"
-            />
-            <input
-              type="email"
-              className="w-full px-4 py-2.5 rounded-xl border border-ink/15 bg-white focus:outline-none focus:ring-2 focus:ring-turf text-sm"
-              value={draft.email}
-              onChange={(e) => setDraft({ ...draft, email: e.target.value })}
-              placeholder="Contact email for recruiters"
-            />
-            <div className="flex gap-2">
-              <PrimaryButton className="!px-4 !py-2 text-sm" onClick={saveProfile}>Save</PrimaryButton>
-              <GhostButton className="!px-4 !py-2 text-sm" onClick={() => setEditOpen(false)}>Cancel</GhostButton>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {careerRequests.length > 0 && (
-        <div className="mb-8">
-          <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-3">Your career requests</p>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {careerRequests.map((r) => (
-              <div key={r.id} className="bg-white rounded-2xl p-4 stitch-border">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm font-semibold">{r.title || "Untitled request"}</p>
-                  <Badge tone="gold">{r.status}</Badge>
-                </div>
-                <p className="text-xs text-ink-soft mb-2">{r.sport}</p>
-                <p className="text-xs text-ink-soft">{r.details}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-3">
-        Opportunities matched to your performance
-      </p>
-      {ranked.length === 0 ? (
-        <EmptyState title="No opportunities yet" body="Check back soon for new career opportunities from organisations." />
-      ) : (
-        <div className="grid sm:grid-cols-2 gap-4">
-          {ranked.map(({ opportunity: o, score, eligible, reasons }) => {
-            const applied = appliedCareerIds.includes(o.id);
-            return (
-              <div key={o.id} className="bg-white rounded-2xl p-5 stitch-border flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="font-display text-lg tracking-wide flex items-center gap-2">
-                      <Briefcase size={16} className="text-turf" /> {o.title}
-                    </p>
-                    <Badge tone={score >= 75 ? "turf" : score >= 50 ? "gold" : "neutral"}>{score}% match</Badge>
-                  </div>
-                  <p className="text-xs text-ink-soft mb-2">{o.orgName} · {o.location}</p>
-                  <p className="text-sm text-ink-soft mb-2">{o.description}</p>
-                  <p className="text-xs text-ink-soft mb-3">
-                    {o.type} · {o.stipend} · Min rating {o.minRating} · Deadline {o.deadline}
-                  </p>
-                  <div className="space-y-1 mb-3">
-                    {reasons.map((r, i) => (
-                      <p key={i} className="text-xs flex items-center gap-1.5 text-clay">
-                        <Sparkles size={11} /> {r}
-                      </p>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 mb-3">
-                    {o.tags?.map((t) => (
-                      <Badge key={t} tone="neutral">{t}</Badge>
-                    ))}
-                  </div>
-                </div>
-                {applied ? (
-                  <GhostButton disabled className="!border-turf !text-turf w-full flex items-center justify-center gap-2 !cursor-default">
-                    <CheckCheck size={15} /> Joined
-                  </GhostButton>
-                ) : (
-                  <PrimaryButton className="w-full" onClick={() => applyToCareer(o.id)} disabled={!eligible}>
-                    {eligible ? "Join" : "Below requirement"}
-                  </PrimaryButton>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <Modal open={requestOpen} onClose={() => setRequestOpen(false)} title="Raise a new career request">
-        <form onSubmit={handleRequestSubmit} className="space-y-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-2">What are you looking for?</p>
-            <input
-              required
-              className="fld"
-              placeholder="e.g. Semi-pro football trials near Koramangala"
-              value={request.title}
-              onChange={(e) => setRequest({ ...request, title: e.target.value })}
-            />
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-2">Sport</p>
-            <select
-              className="fld"
-              value={request.sport}
-              onChange={(e) => setRequest({ ...request, sport: e.target.value })}
-            >
-              {["Football", "Badminton", "Tennis", "Basketball"].map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-2">Details</p>
-            <textarea
-              required
-              rows={3}
-              className="fld"
-              placeholder="Tell organisations more about what you're after"
-              value={request.details}
-              onChange={(e) => setRequest({ ...request, details: e.target.value })}
-            />
-          </div>
-          <p className="text-xs text-ink-soft flex items-center gap-1.5">
-            <Clock size={12} /> Requests are typically reviewed within 5–7 business days.
-          </p>
-          <PrimaryButton type="submit" className="w-full">Submit request</PrimaryButton>
-        </form>
-      </Modal>
-
-      <style>{`.fld { width:100%; padding: 0.625rem 1rem; border-radius: 0.75rem; border: 1px solid rgba(18,32,27,0.15); background: white; font-size: 0.875rem; }`}</style>
-    </div>
-  );
+  return <div>
+    <SectionHeading eyebrow="Career" title="Career opportunities" action={<PrimaryButton onClick={() => setRequestOpen(true)}>Career request</PrimaryButton>} />
+    <p className="text-sm text-ink-soft mb-5">Published opportunities and sample listings. Matching is advisory; confirm requirements with the organisation.</p>
+    {error && <p role="alert" className="rounded-xl bg-clay-light text-clay-deep p-3 mb-4">{error}</p>}
+    {message && <p role="status" className="rounded-xl bg-turf-light text-turf-deep p-3 mb-4">{message}</p>}
+    <section className="bg-white rounded-2xl p-5 md:p-6 stitch-border mb-7" aria-labelledby="career-article-heading">
+      <h2 id="career-article-heading" className="font-display text-2xl">Your career article</h2>
+      <p className="text-sm text-ink-soft mt-1 mb-4">Describe your sports background, experience and goals. Use # headings, **bold**, - bullet lines, and HTTPS links; 80–12,000 characters.</p>
+      <form onSubmit={saveArticle} className="space-y-3">
+        <label className="block text-sm font-semibold" htmlFor="career-article">Article</label>
+        <textarea id="career-article" className="fld w-full" rows={7} required minLength={80} maxLength={12000} value={article} onChange={(e) => setArticle(e.target.value)} />
+        {article && <div className="rounded-xl bg-paper-dim p-3"><p className="text-xs font-bold uppercase text-ink-soft mb-2">Article preview</p><CareerArticle content={article} /></div>}
+        <p className="text-sm text-ink-soft">Contact: {profile.email || "No account email"} · {profile.emailVerified ? "Email code verified" : "Email ownership not verified"}</p>
+        {!profile.emailVerified && <button type="button" onClick={requestCode} className="text-sm font-semibold text-turf underline">Send one-time email code</button>}
+        <div><PrimaryButton type="submit" disabled={saving}>Save article</PrimaryButton></div>
+      </form>
+      {!profile.emailVerified && <form onSubmit={verifyCode} className="flex flex-wrap items-end gap-2 mt-4"><label htmlFor="career-email-code" className="text-sm font-semibold">Six-digit email code</label><input id="career-email-code" className="fld" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required value={emailCode} onChange={(event) => setEmailCode(event.target.value)} /><PrimaryButton type="submit">Verify email</PrimaryButton></form>}
+    </section>
+    {careerRequests.length > 0 && <section className="mb-7"><h2 className="font-display text-xl mb-2">Career requests on this device</h2><p className="text-xs text-ink-soft mb-3">These prototype requests are local drafts and are not delivered to organisations.</p>{careerRequests.map((item) => <p key={item.id} className="bg-white rounded-xl p-3 stitch-border mb-2">{item.title} · {item.sport}</p>)}</section>}
+    <h2 className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-3">Opportunities</h2>
+    {demoLoading && <p role="status" className="text-sm text-ink-soft mb-3">Loading sample opportunities…</p>}
+    {demoError && <p role="status" className="text-sm text-clay-deep mb-3">Sample opportunities unavailable: {demoError}</p>}
+    {loading ? <p role="status">Loading career records…</p> : ranked.length === 0 ? <EmptyState title="No opportunities yet" body="Check back when organisations publish new opportunities." /> : <div className="grid sm:grid-cols-2 gap-4">{ranked.map(({ opportunity: item, score, reasons }) => {
+      const applied = applications.find((application) => application.opportunityId === item.id);
+      return <article key={item.id} className="bg-white rounded-2xl p-5 stitch-border flex flex-col gap-3">
+        <div className="flex items-start justify-between gap-2"><h3 className="font-display text-xl">{item.title}</h3><Badge tone={item.demo ? "gold" : "turf"}>{item.demo ? "Sample" : "Published"}</Badge></div>
+        <p className="text-sm text-ink-soft">{item.orgName} · {item.location} · {item.sport}</p>{!item.demo && !item.organisationVerified && <p className="text-xs text-clay-deep">Organisation verification pending; check the publisher before sharing additional information.</p>}<p className="text-sm whitespace-pre-wrap">{item.description}</p>
+        {item.article && <details className="rounded-xl bg-paper-dim p-3"><summary className="font-semibold text-sm cursor-pointer">Read organisation article</summary><CareerArticle content={item.article} /></details>}
+        <p className="text-xs text-ink-soft">{item.type} · {item.stipend || "Terms on request"} · {item.demo ? "No live deadline" : `Deadline ${item.deadline}`}{!item.demo && ` · Indicative match ${score}%`}</p>
+        {!item.demo && <p className="text-xs text-ink-soft">{reasons.join(" · ")}</p>}
+        {applied ? <p className="text-sm font-semibold text-turf">Application {applied.status}</p> : item.demo ? <p className="text-xs text-ink-soft">Sample listing: applications are unavailable.</p> : <PrimaryButton onClick={() => { setSelected(item); setError(""); }} disabled={!profile.emailVerified || !profile.article}>{!profile.emailVerified ? "Confirm email to apply" : !profile.article ? "Save article to apply" : "Apply with CV"}</PrimaryButton>}
+      </article>;
+    })}</div>}
+    <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={selected ? `Apply: ${selected.title}` : "Apply"}>
+      <form onSubmit={apply} className="space-y-4">
+        <label className="block text-sm font-semibold" htmlFor="career-statement">Application statement</label><textarea id="career-statement" className="fld w-full" required minLength={40} maxLength={3000} rows={5} value={statement} onChange={(e) => setStatement(e.target.value)} />
+        <label className="block text-sm font-semibold" htmlFor="career-cv">CV or resume (PDF or DOCX, 750 KB maximum)</label><input id="career-cv" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required onChange={(e) => setCv(e.target.files?.[0] || null)} />
+        <p className="text-xs text-ink-soft">Your CV, statement and confirmed account email are available only to the posting organisation.</p><PrimaryButton type="submit" disabled={saving}>Submit application</PrimaryButton>
+      </form>
+    </Modal>
+    <Modal open={requestOpen} onClose={() => setRequestOpen(false)} title="Career request">
+      <form onSubmit={(event) => { event.preventDefault(); submitCareerRequest(request); setRequestOpen(false); setRequest({ title: "", sport: "Football", details: "" }); setMessage("Request saved for this session. It has not been sent to an organisation."); }} className="space-y-3">
+        <p className="text-xs text-ink-soft">Prototype draft only; organisations cannot review this request yet.</p>
+        <label className="block text-sm font-semibold" htmlFor="career-request-title">What are you looking for?</label><input id="career-request-title" className="fld w-full" required value={request.title} onChange={(e) => setRequest({ ...request, title: e.target.value })} />
+        <label className="block text-sm font-semibold" htmlFor="career-request-sport">Sport</label><select id="career-request-sport" className="fld w-full" value={request.sport} onChange={(e) => setRequest({ ...request, sport: e.target.value })}>{["Football", "Badminton", "Tennis", "Basketball"].map((sport) => <option key={sport}>{sport}</option>)}</select>
+        <label className="block text-sm font-semibold" htmlFor="career-request-details">Details</label><textarea id="career-request-details" className="fld w-full" required rows={3} value={request.details} onChange={(e) => setRequest({ ...request, details: e.target.value })} /><PrimaryButton type="submit">Save request draft</PrimaryButton>
+      </form>
+    </Modal>
+  </div>;
 }

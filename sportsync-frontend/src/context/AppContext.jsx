@@ -1,23 +1,45 @@
-import { createContext, useContext, useMemo, useState } from "react";
-import { currentPlayer, players, friendships } from "../data/players";
-import { currentOrganisation } from "../data/venues";
-import { games as seedGames, notifications as seedNotifications, fundingOpportunities as seedFundingOpportunities } from "../data/games";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { currentPlayer as seedCurrentPlayer } from "../data/players";
+import { currentOrganisation as seedCurrentOrganisation } from "../data/venues";
+import { games as seedGames, fundingOpportunities as seedFundingOpportunities } from "../data/games";
 import { friendChatSeeds, friendAutoReplies } from "../data/chats";
 import { careerOpportunities as seedCareerOpportunities, defaultCareerProfile } from "../data/career";
 import { sponsorshipDeals as seedSponsorshipDeals } from "../data/sponsorship";
-import { buildSeedActivityEvents } from "../data/activitySeed";
-import { buildActivityEvent, computeUnifiedStreak, localDateToday } from "../lib/activity";
+import { api } from "../lib/api";
 
 const AppContext = createContext(null);
+const TOKEN_KEY = "krid_access_token";
+const emptyDemoCatalog = { players: [], organisations: [], venues: [], opportunities: [], games: [] };
 
 export function AppProvider({ children }) {
-  const [authed, setAuthed] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [session, setSession] = useState(() => ({
+    accessToken: localStorage.getItem(TOKEN_KEY),
+    user: null,
+  }));
+  const [profileState, setProfileState] = useState({ role: null, player: null, organisation: null });
+  const [authed, setAuthed] = useState(Boolean(localStorage.getItem(TOKEN_KEY)));
   const [role, setRole] = useState(null); // "player" | "organisation"
   const [onboarded, setOnboarded] = useState(false);
+  const [demoCatalog, setDemoCatalog] = useState(emptyDemoCatalog);
+  const [demoLoading, setDemoLoading] = useState(true);
+  const [demoError, setDemoError] = useState("");
 
-  const [friendsState, setFriendsState] = useState(friendships);
+  useEffect(() => {
+    if (!session.accessToken) { setDemoLoading(false); return; }
+    let active = true;
+    setDemoLoading(true);
+    setDemoError("");
+    api.getDemoCatalog()
+      .then(({ catalog }) => { if (active) setDemoCatalog(catalog); })
+      .catch((error) => { if (active) setDemoError(error.message || "Could not load examples."); })
+      .finally(() => { if (active) setDemoLoading(false); });
+    return () => { active = false; };
+  }, [session.accessToken]);
+
+  const [friendsState, setFriendsState] = useState([]);
   const [gamesState, setGamesState] = useState(seedGames);
-  const [notificationsState, setNotificationsState] = useState(seedNotifications);
+  const [notificationsState, setNotificationsState] = useState([]);
 
   // FR — Friend messaging (demo): per-friend message threads, seeded with sample history
   const [friendChats, setFriendChats] = useState(friendChatSeeds);
@@ -40,30 +62,107 @@ export function AppProvider({ children }) {
   const [sponsorshipRequests, setSponsorshipRequests] = useState([]); // player-raised sponsorship asks
   const [orgSponsorshipOffers, setOrgSponsorshipOffers] = useState([]); // org-raised offers to sponsor players
 
-  // FR-86/87 — Unified Activity Event stream feeding one authoritative streak (match + exercise + tutorial)
-  const [activityEvents, setActivityEvents] = useState(() => buildSeedActivityEvents());
-  const streak = useMemo(() => computeUnifiedStreak(activityEvents), [activityEvents]);
+  useEffect(() => {
+    let cancelled = false;
+    async function restore() {
+      const token = localStorage.getItem(TOKEN_KEY);
+      if (!token) {
+        setAuthLoading(false);
+        return;
+      }
 
-  // FR-71 to FR-78 — Exercise Mode sessions
-  const [exerciseSessions, setExerciseSessions] = useState([]);
-  // FR-79 to FR-83 — Tutorial Mode sessions
-  const [tutorialSessions, setTutorialSessions] = useState([]);
-  // FR-84/85 — Alternative Sports: player's saved/hidden candidates
-  const [savedAltSportIds, setSavedAltSportIds] = useState([]);
-  const [hiddenAltSportIds, setHiddenAltSportIds] = useState([]);
+      try {
+        const data = await api.me(token);
+        if (cancelled) return;
+        applyAuthState({
+          accessToken: token,
+          user: data.user,
+          profile: data.profile,
+        });
+      } catch {
+        localStorage.removeItem(TOKEN_KEY);
+        if (!cancelled) {
+          setAuthed(false);
+          setRole(null);
+          setOnboarded(false);
+          setSession({ accessToken: null, user: null });
+          setProfileState({ role: null, player: null, organisation: null });
+        }
+      } finally {
+        if (!cancelled) setAuthLoading(false);
+      }
+    }
+    restore();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const login = (selectedRole) => {
-    setAuthed(true);
-    setRole(selectedRole);
+  const applyAuthState = ({ accessToken, user, profile }) => {
+    if (accessToken) localStorage.setItem(TOKEN_KEY, accessToken);
+    setSession({ accessToken, user });
+    setProfileState(profile || { role: null, player: null, organisation: null });
+    setAuthed(Boolean(accessToken));
+    setRole(profile?.role || null);
+    setOnboarded(Boolean(profile?.role));
+  };
+
+  const login = async (credentials) => {
+    const data = await api.login(credentials);
+    if (!data.accessToken) {
+      throw new Error("Login did not return a session. Check your Supabase Auth settings.");
+    }
+    applyAuthState(data);
+    return data;
+  };
+
+  const register = async (credentials) => {
+    const data = await api.register(credentials);
+    if (data.accessToken) {
+      applyAuthState({ ...data, profile: { role: null, player: null, organisation: null } });
+    }
+    return data;
   };
 
   const logout = () => {
+    localStorage.removeItem(TOKEN_KEY);
     setAuthed(false);
     setRole(null);
     setOnboarded(false);
+    setSession({ accessToken: null, user: null });
+    setProfileState({ role: null, player: null, organisation: null });
   };
 
-  const completeOnboarding = () => setOnboarded(true);
+  const completeOnboarding = async (selectedRole, profile) => {
+    const data = await api.selectRole(session.accessToken, { role: selectedRole, profile });
+    setProfileState(data);
+    setRole(data.role);
+    setOnboarded(true);
+    return data;
+  };
+
+  const updatePlayerProfile = async (profile) => {
+    const data = await api.updatePlayerProfile(session.accessToken, profile);
+    setProfileState(data);
+    return data.player;
+  };
+
+  const updateOrganisationProfile = async (profile) => {
+    const data = await api.updateOrganisationProfile(session.accessToken, profile);
+    setProfileState(data);
+    return data.organisation;
+  };
+
+  const deleteProfile = async () => {
+    if (role === "organisation") {
+      await api.deleteOrganisationProfile(session.accessToken);
+    } else {
+      await api.deletePlayerProfile(session.accessToken);
+    }
+    setProfileState({ role: null, player: null, organisation: null });
+    setRole(null);
+    setOnboarded(false);
+  };
 
   const respondFriendRequest = (playerId, accept) => {
     setFriendsState((prev) =>
@@ -134,7 +233,7 @@ export function AppProvider({ children }) {
 
   const submitFundRequest = (request) => {
     setFundRequests((prev) => [
-      { id: `fr${Date.now()}`, status: "Submitted", submittedOn: new Date().toISOString().slice(0, 10), ...request },
+      { id: `fr${Date.now()}`, status: "Local draft", submittedOn: new Date().toISOString().slice(0, 10), ...request },
       ...prev,
     ]);
   };
@@ -151,7 +250,7 @@ export function AppProvider({ children }) {
   // Player: raise a new career request ("looking for a career opportunity in X")
   const submitCareerRequest = (request) => {
     setCareerRequests((prev) => [
-      { id: `cr${Date.now()}`, status: "Submitted", submittedOn: new Date().toISOString().slice(0, 10), ...request },
+      { id: `cr${Date.now()}`, status: "Local draft", submittedOn: new Date().toISOString().slice(0, 10), ...request },
       ...prev,
     ]);
   };
@@ -184,7 +283,7 @@ export function AppProvider({ children }) {
   // Player: raise a custom sponsorship request
   const submitSponsorshipRequest = (request) => {
     setSponsorshipRequests((prev) => [
-      { id: `sr${Date.now()}`, status: "Submitted", submittedOn: new Date().toISOString().slice(0, 10), ...request },
+      { id: `sr${Date.now()}`, status: "Local draft", submittedOn: new Date().toISOString().slice(0, 10), ...request },
       ...prev,
     ]);
   };
@@ -204,62 +303,53 @@ export function AppProvider({ children }) {
     ]);
   };
 
-  // FR-86 — create a unified Activity Event from any qualifying source (match/exercise/tutorial)
-  const addActivityEvent = (type, sourceId, extra) => {
-    setActivityEvents((prev) => [...prev, buildActivityEvent(type, sourceId, extra)]);
-  };
-
-  // FR-20/FR-86 — hook match-result recording into the unified activity/streak stream
-  const recordMatchActivity = (gameId) => addActivityEvent("match", gameId);
-
-  // FR-77/FR-78 — complete an Exercise Mode session; only qualifying completions count toward the streak (BR-20)
-  const completeExerciseSession = (session) => {
-    const record = { id: `exs-${Date.now()}`, date: localDateToday(), markedIncorrect: false, ...session };
-    setExerciseSessions((prev) => [record, ...prev]);
-    if (record.completion === "complete") addActivityEvent("exercise", record.id);
-    return record;
-  };
-
-  // FR-89 — user can mark a CV feedback item / session as incorrect or incomplete
-  const markExerciseFeedbackIncorrect = (sessionId) => {
-    setExerciseSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, markedIncorrect: true } : s)));
-  };
-
-  // FR-82/FR-83 — complete a Tutorial Mode session; qualifies the streak once the checkpoint threshold is met (BR-20)
-  const completeTutorialSession = (session) => {
-    const record = { id: `tus-${Date.now()}`, date: localDateToday(), markedIncorrect: false, ...session };
-    setTutorialSessions((prev) => [record, ...prev]);
-    if (record.checkpointsPassed / Math.max(record.checkpointsTotal, 1) >= 0.6) addActivityEvent("tutorial", record.id);
-    return record;
-  };
-
-  const markTutorialFeedbackIncorrect = (sessionId) => {
-    setTutorialSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, markedIncorrect: true } : s)));
-  };
-
-  // FR-84/85 — save/hide an alternative-sport recommendation
-  const saveAltSport = (sport) => setSavedAltSportIds((prev) => (prev.includes(sport) ? prev : [...prev, sport]));
-  const hideAltSport = (sport) => setHiddenAltSportIds((prev) => (prev.includes(sport) ? prev : [...prev, sport]));
-
   const friendPlayers = useMemo(
     () =>
       friendsState.map((f) => ({
         ...f,
-        player: players.find((p) => p.id === f.playerId),
+        player: demoCatalog.players.find((p) => p.id === f.playerId),
       })),
-    [friendsState]
+    [friendsState, demoCatalog.players]
+  );
+
+  const currentPlayer = useMemo(
+    () => ({
+      ...seedCurrentPlayer,
+      ...(profileState.player || {}),
+      avatar: profileState.player?.avatar || seedCurrentPlayer.avatar,
+      streak: profileState.player?.streak || seedCurrentPlayer.streak,
+    }),
+    [profileState.player]
+  );
+
+  const currentOrganisation = useMemo(
+    () => ({
+      ...seedCurrentOrganisation,
+      ...(profileState.organisation || {}),
+      avatar: profileState.organisation?.avatar || seedCurrentOrganisation.name.slice(0, 2).toUpperCase(),
+    }),
+    [profileState.organisation]
   );
 
   const value = {
+    authLoading,
+    session,
     authed,
     role,
     onboarded,
     login,
+    register,
     logout,
     completeOnboarding,
+    updatePlayerProfile,
+    updateOrganisationProfile,
+    deleteProfile,
     currentPlayer,
     currentOrganisation,
-    allPlayers: players,
+    demoCatalog,
+    demoLoading,
+    demoError,
+    allPlayers: demoCatalog.players,
     friendsState,
     friendPlayers,
     respondFriendRequest,
@@ -294,20 +384,6 @@ export function AppProvider({ children }) {
     submitSponsorshipRequest,
     orgSponsorshipOffers,
     createSponsorshipOffer,
-    activityEvents,
-    addActivityEvent,
-    recordMatchActivity,
-    streak,
-    exerciseSessions,
-    completeExerciseSession,
-    markExerciseFeedbackIncorrect,
-    tutorialSessions,
-    completeTutorialSession,
-    markTutorialFeedbackIncorrect,
-    savedAltSportIds,
-    hiddenAltSportIds,
-    saveAltSport,
-    hideAltSport,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

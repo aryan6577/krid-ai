@@ -1,16 +1,30 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MapPinned, Wallet, Landmark, Briefcase, ArrowRight, ShieldCheck } from "lucide-react";
 import { SectionHeading, ScoreboardStat, Badge } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
-import { venues, orgBookings } from "../../data/venues";
-import { fundraisingCampaigns } from "../../data/games";
+import { api } from "../../lib/api";
 
 export default function OrgDashboard() {
-  const { currentOrganisation } = useApp();
-  const myVenues = venues.filter((v) => v.orgId === currentOrganisation.id);
-  const pendingBookings = orgBookings.filter((b) => b.status === "Pending").length;
-  const totalRevenue = orgBookings.filter((b) => b.status === "Confirmed").reduce((s, b) => s + b.amount, 0);
-  const myCampaign = fundraisingCampaigns.find((f) => f.orgId === currentOrganisation.id);
+  const { currentOrganisation, session, demoCatalog, demoLoading, demoError } = useApp();
+  const [myVenues, setMyVenues] = useState([]);
+  const [orgBookings, setOrgBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!session.accessToken) return;
+    let active = true;
+    setLoading(true);
+    Promise.all([api.getOrgVenues(session.accessToken), api.getOrgBookings(session.accessToken)])
+      .then(([venueData, bookingData]) => {
+        if (active) { setMyVenues(venueData.venues || []); setOrgBookings(bookingData.bookings || []); }
+      })
+      .catch((err) => { if (active) setError(err.message || "Could not load organisation totals."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [session.accessToken]);
+  const pendingBookings = orgBookings.filter((b) => b.status === "pending").length;
+  const totalRevenue = orgBookings.filter((b) => b.status === "confirmed").reduce((s, b) => s + Number(b.amount || 0), 0);
 
   return (
     <div>
@@ -23,11 +37,12 @@ export default function OrgDashboard() {
           </p>
         </div>
         <div className="flex gap-3 flex-wrap">
-          <ScoreboardStat label="Venues" value={myVenues.length} />
-          <ScoreboardStat label="Pending" value={pendingBookings} />
-          <ScoreboardStat label="Revenue" value={`₹${(totalRevenue / 1000).toFixed(1)}k`} />
+          <ScoreboardStat label="Venues" value={loading ? "…" : myVenues.length} />
+          <ScoreboardStat label="Pending" value={loading ? "…" : pendingBookings} />
+          <ScoreboardStat label="Revenue" value={loading ? "…" : `₹${totalRevenue.toLocaleString("en-IN")}`} />
         </div>
       </div>
+      {error && <p role="status" className="text-sm text-clay-deep bg-clay-light rounded-xl p-3 mb-6">{error}</p>}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-10">
         <QuickCard to="/app/venues" icon={MapPinned} title="Manage venues" body="Register turfs/courts, pricing and availability." tone="turf" />
@@ -40,15 +55,17 @@ export default function OrgDashboard() {
         <div className="bg-white rounded-2xl p-6 stitch-border">
           <SectionHeading eyebrow="Recent" title="Bookings" />
           <div className="space-y-3">
-            {orgBookings.map((b) => (
+            {loading && <p role="status" className="text-sm text-ink-soft">Loading live bookings…</p>}
+            {!loading && orgBookings.length === 0 && <p className="text-sm text-ink-soft">No bookings for your venues yet.</p>}
+            {orgBookings.slice(0, 4).map((b) => (
               <div key={b.id} className="flex items-center justify-between p-3 rounded-xl bg-paper-dim">
                 <div>
-                  <p className="text-sm font-semibold">{b.venueName}</p>
-                  <p className="text-xs text-ink-soft">{b.playerName} · {b.date} · {b.time}</p>
+                  <p className="text-sm font-semibold">{b.venue?.name || b.venueId}</p>
+                  <p className="text-xs text-ink-soft">{b.player?.name || "Player"} · {b.slot}</p>
                 </div>
                 <div className="text-right">
                   <p className="scoreboard text-sm font-semibold">₹{b.amount}</p>
-                  <Badge tone={b.status === "Confirmed" ? "turf" : "gold"}>{b.status}</Badge>
+                  <Badge tone={b.status === "confirmed" ? "turf" : "gold"}>{b.status}</Badge>
                 </div>
               </div>
             ))}
@@ -60,25 +77,17 @@ export default function OrgDashboard() {
 
         <div className="bg-white rounded-2xl p-6 stitch-border">
           <SectionHeading eyebrow="Campaign" title="Fundraising" />
-          {myCampaign ? (
-            <div>
-              <p className="font-display text-lg tracking-wide mb-1">{myCampaign.purpose}</p>
-              <p className="text-sm text-ink-soft mb-3">Deadline {myCampaign.deadline}</p>
-              <div className="w-full h-2.5 rounded-full bg-ink/10 overflow-hidden mb-2">
-                <div className="h-full bg-clay rounded-full" style={{ width: `${Math.min(100, (myCampaign.raised / myCampaign.target) * 100)}%` }} />
-              </div>
-              <p className="text-sm text-ink-soft">
-                ₹{myCampaign.raised.toLocaleString("en-IN")} raised of ₹{myCampaign.target.toLocaleString("en-IN")}
-              </p>
-            </div>
-          ) : (
-            <p className="text-sm text-ink-soft">No active campaign yet.</p>
-          )}
+          <p className="text-sm text-ink-soft">Campaign drafts are managed in your fundraising area. They are not published or funded until a real moderation and payment flow is available.</p>
           <Link to="/app/fundraising" className="inline-flex items-center gap-1 text-sm font-semibold text-turf mt-4">
             Manage fundraising <ArrowRight size={14} />
           </Link>
         </div>
       </div>
+      <section className="mt-8" aria-labelledby="sample-org-heading">
+        <h2 id="sample-org-heading" className="font-display text-xl mb-2">Example organisation network</h2>
+        <p className="text-xs text-ink-soft mb-3">{demoCatalog.organisations.length} fictional organisations linked to the same sample venues, roles and games players can browse. They are not verified accounts.</p>
+        {demoLoading ? <p role="status" className="text-sm text-ink-soft">Loading examples…</p> : demoError ? <p role="status" className="text-sm text-clay-deep">Examples unavailable: {demoError}</p> : <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{demoCatalog.organisations.map((org) => <article key={org.id} className="bg-white rounded-xl p-4 stitch-border"><Badge tone="gold">Sample</Badge><h3 className="font-semibold mt-2">{org.name}</h3><p className="text-xs text-ink-soft">{org.type} · {org.location} · {org.sport}</p></article>)}</div>}
+      </section>
     </div>
   );
 }

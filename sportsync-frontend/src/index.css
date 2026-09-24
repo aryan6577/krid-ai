@@ -31,6 +31,20 @@ body {
   color: var(--color-ink);
 }
 
+.coach-button, .coach-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  border-radius: .75rem;
+  padding: .65rem 1rem;
+  font-size: .875rem;
+  font-weight: 700;
+}
+.coach-button { background: var(--color-clay); color: white; }
+.coach-button:hover { background: var(--color-clay-deep); }
+.coach-secondary { background: var(--color-paper-dim); color: var(--color-ink); }
+.coach-button:disabled { opacity: .5; cursor: not-allowed; }
+
 /* Field markings texture used behind hero / auth panels */
 .pitch-lines {
   background-image:

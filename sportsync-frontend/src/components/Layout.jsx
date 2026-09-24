@@ -1,27 +1,26 @@
 import { useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
-  Trophy, Users, Swords, MapPinned, Wallet, LineChart, Landmark,
-  CalendarDays, Bell, Menu, X, HeartHandshake, Building2, Briefcase, Dumbbell,
+  House, Trophy, MapPinned, Wallet, Landmark,
+  CalendarDays, Bell, Menu, X, HeartHandshake, Building2, Briefcase,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { currentPlayer } from "../data/players";
-import { currentOrganisation } from "../data/venues";
 import ChatWidget from "./ChatWidget";
 import { BrandMark, BrandWordmark } from "./Brand";
 
 const playerNav = [
-  { to: "/app/dashboard", label: "Dashboard", icon: Trophy },
-  { to: "/app/matchmaking", label: "Find Players", icon: Swords },
-  { to: "/app/games", label: "Games", icon: Users },
-  { to: "/app/venues", label: "Venues", icon: MapPinned },
-  { to: "/app/performance", label: "Performance", icon: LineChart },
-  { to: "/app/coaching", label: "Coaching", icon: Dumbbell },
-  { to: "/app/friends", label: "Friends", icon: HeartHandshake },
-  { to: "/app/career", label: "Career", icon: Briefcase },
-  { to: "/app/funding", label: "Funding", icon: Landmark },
-  { to: "/app/calendar", label: "Calendar", icon: CalendarDays },
+  { to: "/app/dashboard", label: "Home", icon: House },
+  { to: "/app/play", label: "Play", icon: Trophy },
+  { to: "/app/scholarships", label: "Scholarships", icon: Landmark },
+  { to: "/app/profile", label: "Profile", icon: HeartHandshake },
 ];
+
+function playerTab(pathname) {
+  if (["/app/games", "/app/matchmaking", "/app/venues", "/app/train", "/app/friends"].some((path) => pathname.startsWith(path))) return "/app/play";
+  if (["/app/funding", "/app/career"].some((path) => pathname.startsWith(path))) return "/app/scholarships";
+  if (["/app/performance", "/app/calendar"].some((path) => pathname.startsWith(path))) return "/app/profile";
+  return pathname;
+}
 
 const orgNav = [
   { to: "/app/dashboard", label: "Dashboard", icon: Building2 },
@@ -33,19 +32,20 @@ const orgNav = [
 ];
 
 export default function Layout() {
-  const { role, notificationsState, markAllRead } = useApp();
+  const { role, currentPlayer, currentOrganisation, notificationsState, markAllRead } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const nav = role === "organisation" ? orgNav : playerNav;
   const unread = notificationsState.filter((n) => !n.read).length;
 
   return (
     <div className="min-h-screen bg-paper flex flex-col">
       <header className="bg-turf-deep text-white sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between gap-3 h-16">
+        <div className="max-w-[1768px] mx-auto px-8 md:px-10 flex items-center justify-between gap-3 h-20">
           <div className="flex items-center gap-3 shrink-0">
-            <button className="md:hidden p-1" onClick={() => setMobileOpen((o) => !o)}>
+            <button className={`${role === "organisation" ? "md:hidden" : "hidden"} p-1`} onClick={() => setMobileOpen((o) => !o)}>
               {mobileOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
             <button
@@ -54,24 +54,24 @@ export default function Layout() {
               title="Go to landing page"
             >
               <BrandMark className="w-8 h-8" tone="orange" />
-              <span className="hidden lg:inline">
-                <BrandWordmark className="text-xl text-white" accentClassName="text-gold" />
+              <span className="hidden sm:inline">
+                <BrandWordmark className="text-2xl text-white" accentClassName="text-gold" />
               </span>
             </button>
           </div>
 
-          <nav className="hidden md:flex items-center gap-0.5 overflow-x-auto no-scrollbar min-w-0">
+          <nav className="hidden md:flex items-center gap-5 overflow-x-auto no-scrollbar min-w-0">
             {nav.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
                 className={({ isActive }) =>
-                  `flex items-center gap-1.5 px-2.5 py-2 rounded-full text-sm font-medium transition whitespace-nowrap shrink-0 ${
-                    isActive ? "bg-white text-turf-deep" : "text-white/80 hover:bg-white/10 hover:text-white"
+                  `flex items-center gap-2 px-7 py-3 rounded-full text-lg font-bold transition whitespace-nowrap shrink-0 ${
+                    (role === "organisation" ? isActive : playerTab(location.pathname) === to) ? "bg-turf text-white shadow-sm" : "text-white/90 hover:bg-white/10 hover:text-white"
                   }`
                 }
               >
-                <Icon size={16} />
+                <Icon size={17} className="hidden lg:block" />
                 {label}
               </NavLink>
             ))}
@@ -85,6 +85,7 @@ export default function Layout() {
                   if (!notifOpen) markAllRead();
                 }}
                 className="relative p-2 rounded-full hover:bg-white/10 transition"
+                aria-label="Notifications"
               >
                 <Bell size={19} />
                 {unread > 0 && (
@@ -112,8 +113,8 @@ export default function Layout() {
               className="flex items-center gap-2 pl-1"
               title={`View profile — ${role === "organisation" ? currentOrganisation.name : currentPlayer.name}`}
             >
-              <span className="w-8 h-8 rounded-full bg-gold text-turf-deep font-bold text-xs flex items-center justify-center">
-                {role === "organisation" ? "GA" : currentPlayer.avatar}
+              <span className="w-12 h-12 rounded-full bg-gold border-4 border-white text-turf-deep font-bold text-sm flex items-center justify-center">
+                {role === "organisation" ? currentOrganisation.avatar : currentPlayer.avatar}
               </span>
             </button>
           </div>
@@ -140,11 +141,14 @@ export default function Layout() {
         )}
       </header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 md:px-6 py-6 md:py-8">
+      <main className="flex-1 max-w-[1768px] w-full mx-auto px-5 md:px-9 py-6 md:py-8 pb-24 md:pb-8">
         <Outlet />
       </main>
 
-      <footer className="text-center text-xs text-ink-soft/60 py-6">
+      {role !== "organisation" && <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-ink/10 grid grid-cols-4 px-2 pb-[env(safe-area-inset-bottom)]" aria-label="Main navigation">
+        {playerNav.map(({ to, label, icon: Icon }) => <NavLink key={to} to={to} className={`flex flex-col items-center gap-1 py-3 text-[11px] font-bold ${playerTab(location.pathname) === to ? "text-turf" : "text-ink-soft"}`}><Icon size={21} aria-hidden="true" />{label}</NavLink>)}
+      </nav>}
+      <footer className="text-center text-xs text-ink-soft/60 py-6 hidden md:block">
         © 2026 Krid.ai. All Rights Reserved.
       </footer>
 

@@ -122,6 +122,9 @@ export const players = [
     recentForm: 0.6,
     streak: { current: 4, longest: 10 },
   },
+  { id: "p8", name: "Nisha Fernandes", avatar: "NF", location: "Indiranagar, Bengaluru", lat: 12.9784, lng: 77.6408, sports: ["Tennis", "Badminton"], skill: { Tennis: "Intermediate", Badminton: "Beginner" }, availability: ["Weekend Evenings"], competitivePreference: "Friendly", rating: 1375, recentForm: 0.54, streak: { current: 0, longest: 3 }, demo: true },
+  { id: "p9", name: "Kabir Ahmed", avatar: "KA", location: "Whitefield, Bengaluru", lat: 12.9698, lng: 77.75, sports: ["Football", "Basketball"], skill: { Football: "Advanced", Basketball: "Intermediate" }, availability: ["Sunday Morning"], competitivePreference: "Competitive", rating: 1542, recentForm: 0.71, streak: { current: 0, longest: 5 }, demo: true },
+  { id: "p10", name: "Leela Shah", avatar: "LS", location: "Jayanagar, Bengaluru", lat: 12.9308, lng: 77.5838, sports: ["Badminton", "Tennis"], skill: { Badminton: "Advanced", Tennis: "Intermediate" }, availability: ["Weekday Evenings"], competitivePreference: "Competitive", rating: 1508, recentForm: 0.63, streak: { current: 0, longest: 7 }, demo: true },
 ];
 
 export const friendships = [

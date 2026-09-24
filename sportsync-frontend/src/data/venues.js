@@ -92,6 +92,8 @@ export const venues = [
     rating: 4.5,
     image: "court",
   },
+  { id: "v7", orgId: "o5", name: "Indiranagar Multi Sport Hall", sport: "Basketball", location: "Indiranagar, Bengaluru", lat: 12.9784, lng: 77.6408, pricePerHour: 800, facilities: ["Indoor Court", "Water", "Changing Room"], availability: ["Weekend Evenings"], rating: 4.4, image: "court", demo: true },
+  { id: "v8", orgId: "o6", name: "Whitefield Practice Courts", sport: "Tennis", location: "Whitefield, Bengaluru", lat: 12.9698, lng: 77.75, pricePerHour: 650, facilities: ["Floodlights", "Water"], availability: ["Weekday Evenings"], rating: 4.1, image: "court", demo: true },
 ];
 
 export const orgBookings = [

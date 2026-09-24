@@ -3,16 +3,20 @@ import { AppProvider, useApp } from "./context/AppContext";
 import Layout from "./components/Layout";
 
 import Landing from "./pages/Landing";
+import DemoExplorer from "./pages/DemoExplorer";
 import Auth from "./pages/auth/Auth";
 import Onboarding from "./pages/auth/Onboarding";
 
 import PlayerDashboard from "./pages/player/Dashboard";
+import Play from "./pages/player/Play";
+import Scholarships from "./pages/player/Scholarships";
 import Matchmaking from "./pages/player/Matchmaking";
 import Games from "./pages/player/Games";
 import GameDetail from "./pages/player/GameDetail";
 import Venues from "./pages/player/Venues";
 import Performance from "./pages/player/Performance";
 import Friends from "./pages/player/Friends";
+import Train from "./pages/player/Train";
 
 import OrgDashboard from "./pages/org/Dashboard";
 import OrgVenues from "./pages/org/Venues";
@@ -25,31 +29,32 @@ import Funding from "./pages/Funding";
 import Calendar from "./pages/Calendar";
 import Profile from "./pages/Profile";
 
-import Coaching from "./pages/player/Coaching";
-import ExerciseMode from "./pages/player/ExerciseMode";
-import ExerciseSession from "./pages/player/ExerciseSession";
-import TutorialMode from "./pages/player/TutorialMode";
-import TutorialSession from "./pages/player/TutorialSession";
-import AlternativeSports from "./pages/player/AlternativeSports";
-
 function RequireAuth({ children }) {
-  const { authed } = useApp();
+  const { authed, authLoading } = useApp();
+  if (authLoading) return <div className="min-h-screen bg-paper flex items-center justify-center text-ink-soft">Loading Krid.ai...</div>;
   if (!authed) return <Navigate to="/auth" replace />;
   return children;
 }
 
+function RequireOnboarded({ children }) {
+  const { onboarded } = useApp();
+  if (!onboarded) return <Navigate to="/onboarding" replace />;
+  return children;
+}
+
 function AppRoutes() {
-  const { role } = useApp();
+  const { role, onboarded } = useApp();
 
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
+      <Route path="/demo" element={<DemoExplorer />} />
       <Route path="/auth" element={<Auth />} />
       <Route
         path="/onboarding"
         element={
           <RequireAuth>
-            <Onboarding />
+            {onboarded ? <Navigate to="/app/dashboard" replace /> : <Onboarding />}
           </RequireAuth>
         }
       />
@@ -58,12 +63,16 @@ function AppRoutes() {
         path="/app"
         element={
           <RequireAuth>
-            <Layout />
+            <RequireOnboarded>
+              <Layout />
+            </RequireOnboarded>
           </RequireAuth>
         }
       >
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={role === "organisation" ? <OrgDashboard /> : <PlayerDashboard />} />
+        {role !== "organisation" && <Route path="play" element={<Play />} />}
+        {role !== "organisation" && <Route path="scholarships" element={<Scholarships />} />}
         <Route path="venues" element={role === "organisation" ? <OrgVenues /> : <Venues />} />
         <Route path="career" element={role === "organisation" ? <OrgCareer /> : <Career />} />
         <Route path="calendar" element={<Calendar />} />
@@ -80,14 +89,9 @@ function AppRoutes() {
             <Route path="matchmaking" element={<Matchmaking />} />
             <Route path="games" element={<Games />} />
             <Route path="games/:id" element={<GameDetail />} />
+            <Route path="train" element={<Train />} />
             <Route path="performance" element={<Performance />} />
             <Route path="friends" element={<Friends />} />
-            <Route path="coaching" element={<Coaching />} />
-            <Route path="coaching/exercise" element={<ExerciseMode />} />
-            <Route path="coaching/exercise/:exerciseId" element={<ExerciseSession />} />
-            <Route path="coaching/tutorial" element={<TutorialMode />} />
-            <Route path="coaching/tutorial/:drillId" element={<TutorialSession />} />
-            <Route path="coaching/alternative-sports" element={<AlternativeSports />} />
           </>
         )}
       </Route>

@@ -1,38 +1,66 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { X, Heart, Bookmark, Sparkles } from "lucide-react";
 import { SectionHeading, Badge, ProgressBar, EmptyState } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
-import { rankCandidates } from "../../lib/ai";
+import { api } from "../../lib/api";
 
 const SPORTS = ["Football", "Badminton", "Tennis", "Basketball"];
 
 export default function Matchmaking() {
-  const { currentPlayer, allPlayers, sendFriendRequest, pushNotification } = useApp();
+  const { currentPlayer, session, pushNotification } = useApp();
   const [sport, setSport] = useState(currentPlayer.sports[0] || SPORTS[0]);
+  const [candidates, setCandidates] = useState([]);
   const [index, setIndex] = useState(0);
   const [exitDir, setExitDir] = useState(null);
-  const [saved, setSaved] = useState([]);
   const [log, setLog] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const current = candidates[index];
 
-  const ranked = useMemo(() => rankCandidates(currentPlayer, allPlayers, sport), [currentPlayer, allPlayers, sport]);
-  const current = ranked[index];
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCandidates() {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await api.getMatchCandidates(session.accessToken, sport);
+        if (!cancelled) {
+          setCandidates(data.candidates || []);
+          setIndex(0);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err.message || "Could not load matches.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    if (session.accessToken && sport) loadCandidates();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.accessToken, sport]);
 
   const act = (action) => {
     if (!current) return;
-    setExitDir(action === "reject" ? "left" : "right");
-    setTimeout(() => {
-      if (action === "accept") {
-        sendFriendRequest(current.player.id);
-        pushNotification({ type: "match", text: `You matched with ${current.player.name} for ${sport}.` });
-        setLog((l) => [{ ...current, action: "Accepted" }, ...l]);
-      } else if (action === "save") {
-        setSaved((s) => [...s, current]);
-        setLog((l) => [{ ...current, action: "Saved" }, ...l]);
-      } else {
-        setLog((l) => [{ ...current, action: "Rejected" }, ...l]);
+    setExitDir(action === "rejected" ? "left" : "right");
+    setTimeout(async () => {
+      try {
+        const result = await api.saveMatchAction(session.accessToken, current.player.id, {
+          action,
+          sport,
+          score: current.score,
+          reason: current.reasons.join(", "),
+        });
+        if (action === "accepted") {
+          pushNotification({ type: "match", text: result.demoTeammate ? `${current.player.name} was added as a demo teammate. Create a game at a demo venue to play together.` : `Friend request sent to ${current.player.name}.` });
+        }
+        setLog((l) => [{ ...current, action: labelFor(action) }, ...l]);
+        setIndex((i) => i + 1);
+      } catch (err) {
+        setError(err.message || "Could not save match action.");
+      } finally {
+        setExitDir(null);
       }
-      setExitDir(null);
-      setIndex((i) => i + 1);
     }, 220);
   };
 
@@ -44,7 +72,7 @@ export default function Matchmaking() {
   return (
     <div>
       <SectionHeading
-        eyebrow="AI Matchmaking · FR-08"
+        eyebrow="Transparent matchmaking"
         title="Find compatible players"
         action={
           <div className="flex gap-2 flex-wrap">
@@ -63,12 +91,16 @@ export default function Matchmaking() {
         }
       />
 
+      {error && <p className="text-sm text-clay-deep bg-clay-light rounded-xl px-3 py-2 mb-5">{error}</p>}
+
       <div className="grid lg:grid-cols-[380px_1fr] gap-8">
         <div>
-          {!current ? (
+          {loading ? (
+            <EmptyState title="Ranking players" body="Calculating transparent compatibility scores from sport, skill, distance, availability, and connection history." />
+          ) : !current ? (
             <EmptyState
               title="You've seen everyone"
-              body={`No more ${sport} players to review right now. Try another sport or check back later.`}
+              body={`No more ${sport} players to review right now. Saved/rejected players will not resurface immediately.`}
             />
           ) : (
             <div className="relative">
@@ -79,11 +111,9 @@ export default function Matchmaking() {
                 }`}
               >
                 <div className="flex items-center justify-between mb-4">
-                  <Badge tone={current.score >= 75 ? "turf" : current.score >= 50 ? "gold" : "neutral"}>
-                    {current.score}% match
-                  </Badge>
+                  <div className="flex items-center gap-2"><Badge tone={current.score >= 75 ? "turf" : current.score >= 50 ? "gold" : "neutral"}>{current.score}% match</Badge>{current.player.demo && <Badge tone="gold">Demo player</Badge>}</div>
                   <span className="scoreboard text-xs text-ink-soft">
-                    {sport.toUpperCase()} · {current.distanceKm.toFixed(1)} KM
+                    {sport.toUpperCase()} · {current.distanceKm == null ? "DISTANCE N/A" : `${current.distanceKm.toFixed(1)} KM`}
                   </span>
                 </div>
                 <div className="w-full h-40 rounded-2xl bg-turf-light flex items-center justify-center mb-4">
@@ -93,8 +123,8 @@ export default function Matchmaking() {
                 </div>
                 <p className="font-display text-2xl tracking-wide">{current.player.name}</p>
                 <p className="text-sm text-ink-soft mb-3">
-                  {current.player.skill?.[sport] ?? "Intermediate"} · {current.player.availability[0]} ·{" "}
-                  {current.player.competitivePreference}
+                  {current.player.skill?.[sport] ?? "Intermediate"} · {current.player.availability?.[0] || "Availability not set"} ·{" "}
+                  {current.player.competitivePreference || "Preference not set"}
                 </p>
                 <div className="mb-4">
                   <div className="flex items-center justify-between text-xs text-ink-soft mb-1">
@@ -103,22 +133,26 @@ export default function Matchmaking() {
                   </div>
                   <ProgressBar value={current.score} tone={current.score >= 75 ? "turf" : "gold"} />
                 </div>
-                <div className="space-y-1.5 mb-2">
+                <div className="space-y-1.5 mb-3">
                   {current.reasons.map((r, i) => (
                     <p key={i} className="text-xs flex items-center gap-1.5 text-ink-soft">
                       <Sparkles size={12} className="text-clay" /> {r}
                     </p>
                   ))}
                 </div>
+                <p className="text-[11px] leading-5 text-ink-soft bg-paper-dim rounded-xl px-3 py-2">
+                  {current.explanation}
+                </p>
+                {current.player.demo && <p className="text-xs text-ink-soft mt-3">Fictional demo profile. Accepting adds a labelled demo teammate to Friends immediately; no real person is contacted.</p>}
               </div>
 
               <div className="flex items-center justify-center gap-4 mt-5">
-                <RoundBtn onClick={() => act("reject")} tone="clay"><X size={22} /></RoundBtn>
-                <RoundBtn onClick={() => act("save")} tone="gold" small><Bookmark size={17} /></RoundBtn>
-                <RoundBtn onClick={() => act("accept")} tone="turf"><Heart size={22} /></RoundBtn>
+                <RoundBtn onClick={() => act("rejected")} tone="clay" ariaLabel="Pass on player"><X size={22} /></RoundBtn>
+                <RoundBtn onClick={() => act("saved")} tone="gold" small ariaLabel="Save player for later"><Bookmark size={17} /></RoundBtn>
+                <RoundBtn onClick={() => act("accepted")} tone="turf" ariaLabel={current.player.demo ? "Add demo teammate" : "Send friend request"}><Heart size={22} /></RoundBtn>
               </div>
               <p className="text-center text-xs text-ink-soft/70 mt-3">
-                {ranked.length - index - 1} more {sport} players in your area
+                {Math.max(0, candidates.length - index - 1)} more {sport} players in your area
               </p>
             </div>
           )}
@@ -154,7 +188,11 @@ export default function Matchmaking() {
   );
 }
 
-function RoundBtn({ children, onClick, tone, small }) {
+function labelFor(action) {
+  return action === "accepted" ? "Accepted" : action === "saved" ? "Saved" : "Rejected";
+}
+
+function RoundBtn({ children, onClick, tone, small, ariaLabel }) {
   const tones = {
     clay: "bg-white border-2 border-clay text-clay hover:bg-clay hover:text-white",
     turf: "bg-white border-2 border-turf text-turf hover:bg-turf hover:text-white",
@@ -163,6 +201,7 @@ function RoundBtn({ children, onClick, tone, small }) {
   return (
     <button
       onClick={onClick}
+      aria-label={ariaLabel}
       className={`rounded-full flex items-center justify-center transition shadow-md ${small ? "w-11 h-11" : "w-16 h-16"} ${tones[tone]}`}
     >
       {children}

@@ -7,7 +7,7 @@ import { useApp } from "../context/AppContext";
 
 const TAGS = ["infrastructure", "turf", "community", "scholarship", "youth", "training", "wellness", "participation", "lighting", "equipment"];
 
-export default function Funding() {
+export default function Funding({ section = "all" }) {
   const {
     currentPlayer,
     fundRequests,
@@ -56,6 +56,7 @@ export default function Funding() {
 
   return (
     <div>
+      <div className={section === "sponsorships" ? "hidden" : ""}>
       <SectionHeading
         eyebrow="Funding Module · FR-26 / FR-27"
         title="Find funding opportunities"
@@ -66,28 +67,28 @@ export default function Funding() {
         }
       />
       <p className="text-sm text-ink-soft max-w-2xl mb-6">
-        AI fund matching is a search/recommendation facility only — it does not guarantee eligibility or funding (BR-13).
+        Fictional sample options for exploring matching. Confirm every provider, deadline and eligibility before applying outside Krid.ai.
       </p>
 
       {justSubmitted && (
         <div className="mb-6 bg-turf-light text-turf-deep rounded-xl px-4 py-3 text-sm flex items-center gap-2">
-          <CheckCheck size={16} /> Your fund request was submitted and is now under review.
+          <CheckCheck size={16} /> Fund request saved in this browser session. It has not been sent for review.
         </div>
       )}
 
       {fundRequests.length > 0 && (
         <div className="mb-8">
-          <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-3">Your fund requests</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-3">Local fund request drafts</p>
           <div className="grid sm:grid-cols-2 gap-4">
             {fundRequests.map((r) => (
               <div key={r.id} className="bg-white rounded-2xl p-4 stitch-border">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-sm font-semibold">{r.title || "Untitled request"}</p>
-                  <Badge tone="gold">{r.status}</Badge>
+                  <Badge tone="gold">Local draft</Badge>
                 </div>
                 <p className="text-xs text-ink-soft mb-2">{r.purpose}</p>
                 <p className="text-xs text-ink-soft">
-                  {r.amount ? `₹${r.amount}` : "Amount TBD"} · Needed by {r.deadline || "—"} · Submitted {r.submittedOn}
+                    {r.amount ? `₹${r.amount}` : "Amount TBD"} · Needed by {r.deadline || "—"} · Saved {r.submittedOn}
                 </p>
               </div>
             ))}
@@ -96,7 +97,7 @@ export default function Funding() {
       )}
 
       <div className="mb-10">
-        <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-3">Already-listed funding options</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-3">Sample funding options</p>
         <div className="grid sm:grid-cols-2 gap-4">
           {fundingOpportunities.map((o) => {
             const applied = appliedFundingIds.includes(o.id);
@@ -104,7 +105,7 @@ export default function Funding() {
               <div key={o.id} className="bg-white rounded-2xl p-5 stitch-border flex flex-col justify-between">
                 <div>
                   <p className="font-display text-lg tracking-wide flex items-center gap-2 mb-1">
-                    <Landmark size={16} className="text-turf" /> {o.provider}
+                    <Landmark size={16} className="text-turf" /> {o.provider} <Badge tone="gold">Sample</Badge>
                   </p>
                   <p className="text-sm text-ink-soft mb-2">{o.purpose}</p>
                   <p className="text-xs text-ink-soft mb-3">
@@ -118,11 +119,11 @@ export default function Funding() {
                 </div>
                 {applied ? (
                   <GhostButton disabled className="!border-turf !text-turf w-full flex items-center justify-center gap-2 !cursor-default">
-                    <CheckCheck size={15} /> Applied
+                    <CheckCheck size={15} /> Interest saved locally
                   </GhostButton>
                 ) : (
                   <PrimaryButton className="w-full" onClick={() => applyToFunding(o.id)}>
-                    Apply now
+                    Save interest
                   </PrimaryButton>
                 )}
               </div>
@@ -200,11 +201,11 @@ export default function Funding() {
                     </div>
                     {applied ? (
                       <GhostButton disabled className="!border-turf !text-turf !px-3 !py-1.5 text-xs flex items-center gap-1.5 !cursor-default">
-                        <CheckCheck size={13} /> Applied
+                        <CheckCheck size={13} /> Interest saved locally
                       </GhostButton>
                     ) : (
                       <PrimaryButton className="!px-3 !py-1.5 text-xs" onClick={() => applyToFunding(opportunity.id)}>
-                        Apply now
+                        Save interest
                       </PrimaryButton>
                     )}
                   </div>
@@ -215,7 +216,9 @@ export default function Funding() {
         </div>
       </div>
 
-      <div className="mt-12">
+      </div>
+
+      <div className={section === "funding" ? "hidden" : ""}>
         <SectionHeading
           eyebrow="Sponsorship Module"
           title="Sponsorships"
@@ -226,25 +229,25 @@ export default function Funding() {
           }
         />
         <p className="text-sm text-ink-soft max-w-2xl mb-6">
-          Brand sponsorship deals matched to your sport and rating — apply to any that fit, or raise a custom
+          Sample sponsorship deals matched to your sport and rating — save interest in any that fit, or raise a custom
           request below.
         </p>
 
         {sponsorJustSubmitted && (
           <div className="mb-6 bg-turf-light text-turf-deep rounded-xl px-4 py-3 text-sm flex items-center gap-2">
-            <CheckCheck size={16} /> Your sponsorship request was submitted and is now under review.
+            <CheckCheck size={16} /> Sponsorship request saved in this browser session. It has not been sent for review.
           </div>
         )}
 
         {sponsorshipRequests.length > 0 && (
           <div className="mb-8">
-            <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-3">Your sponsorship requests</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-3">Local sponsorship request drafts</p>
             <div className="grid sm:grid-cols-2 gap-4">
               {sponsorshipRequests.map((r) => (
                 <div key={r.id} className="bg-white rounded-2xl p-4 stitch-border">
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-sm font-semibold">{r.brand || "Any brand"}</p>
-                    <Badge tone="gold">{r.status}</Badge>
+                    <Badge tone="gold">Local draft</Badge>
                   </div>
                   <p className="text-xs text-ink-soft mb-2">{r.sport}</p>
                   <p className="text-xs text-ink-soft">{r.details}</p>
@@ -255,7 +258,7 @@ export default function Funding() {
         )}
 
         <div className="grid sm:grid-cols-2 gap-4">
-          {rankedSponsorships.map(({ opportunity: d, score, eligible, reasons }) => {
+          {rankedSponsorships.map(({ opportunity: d, score, reasons }) => {
             const requested = requestedSponsorshipIds.includes(d.id);
             return (
               <div key={d.id} className="bg-white rounded-2xl p-5 stitch-border flex flex-col justify-between">
@@ -280,11 +283,11 @@ export default function Funding() {
                 </div>
                 {requested ? (
                   <GhostButton disabled className="!border-turf !text-turf w-full flex items-center justify-center gap-2 !cursor-default">
-                    <CheckCheck size={15} /> Requested
+                    <CheckCheck size={15} /> Interest saved locally
                   </GhostButton>
                 ) : (
-                  <PrimaryButton className="w-full" onClick={() => requestSponsorship(d.id)} disabled={!eligible}>
-                    {eligible ? "Request sponsorship" : "Below requirement"}
+                  <PrimaryButton className="w-full" onClick={() => requestSponsorship(d.id)}>
+                    Save interest
                   </PrimaryButton>
                 )}
               </div>
@@ -328,7 +331,7 @@ export default function Funding() {
             />
           </div>
           <p className="text-xs text-ink-soft flex items-center gap-1.5">
-            <Clock size={12} /> Requests are typically reviewed within 5–7 business days.
+            <Clock size={12} /> This draft stays in this browser session and is not delivered to a sponsor.
           </p>
           <PrimaryButton type="submit" className="w-full">Submit request</PrimaryButton>
         </form>
@@ -375,7 +378,7 @@ export default function Funding() {
             />
           </div>
           <p className="text-xs text-ink-soft flex items-center gap-1.5">
-            <Clock size={12} /> Requests are typically reviewed within 5–7 business days.
+            <Clock size={12} /> This draft stays in this browser session and is not delivered to a provider.
           </p>
           <PrimaryButton type="submit" className="w-full">
             Submit request

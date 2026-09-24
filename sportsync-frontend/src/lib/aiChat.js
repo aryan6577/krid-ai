@@ -4,7 +4,7 @@
 // 127.0.0.1 (rather than "localhost") sidesteps a common Windows quirk where
 // "localhost" resolves to the IPv6 loopback first and can fail to connect
 // even though the server is listening fine on IPv4.
-export const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:5001";
+export const API_BASE = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? "" : "http://127.0.0.1:5001");
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
   const controller = new AbortController();

@@ -1,15 +1,13 @@
 import { useMemo, useState } from "react";
-import { Plus, ShieldAlert, Mail, Star, HeartHandshake } from "lucide-react";
+import { Plus, ShieldAlert, Star, HeartHandshake } from "lucide-react";
 import { SectionHeading, Badge, PrimaryButton, EmptyState, Modal, ProgressBar } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import { fundraisingCampaigns as seed } from "../../data/games";
-import { currentPlayer, players as demoPlayers } from "../../data/players";
 
 const SPORTS = ["Football", "Badminton", "Tennis", "Basketball"];
-const demoEmail = (name) => `${name.toLowerCase().replace(/\s+/g, ".")}@krid.demo`;
 
 export default function OrgFundraising() {
-  const { currentOrganisation, orgSponsorshipOffers, createSponsorshipOffer } = useApp();
+  const { currentOrganisation, orgSponsorshipOffers, createSponsorshipOffer, demoCatalog, demoLoading, demoError } = useApp();
   const [campaigns, setCampaigns] = useState(seed.filter((c) => c.orgId === currentOrganisation.id));
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ purpose: "", target: "", deadline: "", terms: "" });
@@ -30,14 +28,13 @@ export default function OrgFundraising() {
     setForm({ purpose: "", target: "", deadline: "", terms: "" });
   };
 
-  const allPlayers = useMemo(() => [currentPlayer, ...demoPlayers], []);
   const sponsorablePlayers = useMemo(
     () =>
-      allPlayers
+      demoCatalog.players
         .filter((p) => (sponsorSport === "All" ? true : p.sports.includes(sponsorSport)))
         .filter((p) => p.rating >= sponsorMinRating)
         .sort((a, b) => b.rating - a.rating),
-    [allPlayers, sponsorSport, sponsorMinRating]
+    [demoCatalog.players, sponsorSport, sponsorMinRating]
   );
 
   const submitOffer = (e) => {
@@ -104,13 +101,13 @@ export default function OrgFundraising() {
         />
         <p className="text-xs text-ink-soft flex items-center gap-1.5 mb-6 max-w-2xl">
           <ShieldAlert size={13} /> Browse players available for sponsorship, or raise a request/offer for a
-          specific player. Player data shown is demo data.
+          specific player. Sample profiles are fictional and cannot receive offers. No contact details are provided.
         </p>
 
         <div className="grid lg:grid-cols-[1fr_360px] gap-6">
           <div>
             <div className="flex items-end justify-between mb-4 flex-wrap gap-3">
-              <p className="text-xs font-bold uppercase tracking-widest text-ink-soft">Players available for sponsorship</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-ink-soft">Example player profiles</p>
               <div className="flex gap-2 flex-wrap">
                 <select className="fld-sm" value={sponsorSport} onChange={(e) => setSponsorSport(e.target.value)}>
                   <option value="All">All sports</option>
@@ -127,7 +124,9 @@ export default function OrgFundraising() {
               </div>
             </div>
 
-            {sponsorablePlayers.length === 0 ? (
+            {demoLoading && <p role="status" className="text-sm text-ink-soft">Loading sample players…</p>}
+            {demoError && <p role="status" className="text-sm text-clay-deep">Sample players unavailable: {demoError}</p>}
+            {!demoLoading && !demoError && (sponsorablePlayers.length === 0 ? (
               <EmptyState title="No players match" body="Try widening the sport or rating filter." />
             ) : (
               <div className="grid sm:grid-cols-2 gap-4">
@@ -143,18 +142,16 @@ export default function OrgFundraising() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap mb-2">
-                      <Badge tone="turf"><Star size={11} className="inline -mt-0.5 mr-1" />{p.rating}</Badge>
+                      <Badge tone="gold">Sample</Badge><Badge tone="neutral"><Star size={11} className="inline -mt-0.5 mr-1" />Illustrative {p.rating}</Badge>
                       {p.sports.map((s) => (
                         <Badge key={s} tone="neutral">{s}</Badge>
                       ))}
                     </div>
-                    <p className="text-xs text-ink-soft flex items-center gap-1.5">
-                      <Mail size={11} /> {demoEmail(p.name)}
-                    </p>
+                    <p className="text-xs text-ink-soft">No contact or verified performance attached to sample profiles.</p>
                   </div>
                 ))}
               </div>
-            )}
+            ))}
           </div>
 
           <div>

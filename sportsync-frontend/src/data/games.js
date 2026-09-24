@@ -2,7 +2,7 @@ export const games = [
   {
     id: "g201",
     sport: "Football",
-    date: "2026-08-24",
+    date: "2026-10-04",
     time: "7:00 PM",
     venue: "Greenfield Turf 1",
     capacity: 10,
@@ -13,7 +13,7 @@ export const games = [
   {
     id: "g202",
     sport: "Badminton",
-    date: "2026-08-25",
+    date: "2026-10-06",
     time: "6:30 PM",
     venue: "SmashCourt Badminton Club",
     capacity: 4,
@@ -24,7 +24,7 @@ export const games = [
   {
     id: "g203",
     sport: "Football",
-    date: "2026-08-27",
+    date: "2026-10-09",
     time: "6:00 AM",
     venue: "Greenfield Turf 2 (5-a-side)",
     capacity: 10,
@@ -32,6 +32,9 @@ export const games = [
     status: "Full",
     createdBy: "p4",
   },
+  { id: "g204", sport: "Tennis", date: "2026-10-11", time: "8:00 AM", venue: "Eastwood Tennis Academy", capacity: 4, participants: ["p3", "p7"], status: "Open", createdBy: "p3", demo: true },
+  { id: "g205", sport: "Basketball", date: "2026-10-13", time: "7:00 PM", venue: "Baseline Basketball Court", capacity: 10, participants: ["p4", "p6", "p2"], status: "Open", createdBy: "p4", demo: true },
+  { id: "g206", sport: "Football", date: "2026-10-17", time: "6:30 PM", venue: "Greenfield Turf 2 (5-a-side)", capacity: 10, participants: ["p1", "p2", "p4", "p6"], status: "Open", createdBy: "p2", demo: true },
 ];
 
 export const fundraisingCampaigns = [

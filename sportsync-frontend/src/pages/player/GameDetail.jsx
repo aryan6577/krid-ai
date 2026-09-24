@@ -1,54 +1,103 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Wand2, IndianRupee, Trophy } from "lucide-react";
 import { SectionHeading, Badge, PrimaryButton, GhostButton, ProgressBar } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
-import { players as allSample, currentPlayer } from "../../data/players";
-import { venues } from "../../data/venues";
-import { balanceTeams } from "../../lib/ai";
-import MatchForecast from "../../components/MatchForecast";
+import { api } from "../../lib/api";
 
 export default function GameDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { gamesState, allPlayers, pushNotification, recordMatchActivity } = useApp();
-  const game = gamesState.find((g) => g.id === id);
-  const venue = useMemo(() => venues.find((v) => v.name === game?.venue), [game]);
-
-  const roster = useMemo(() => {
-    if (!game) return [];
-    return game.participants.map((pid) =>
-      pid === currentPlayer.id ? currentPlayer : allPlayers.find((p) => p.id === pid) || allSample.find((p) => p.id === pid)
-    ).filter(Boolean);
-  }, [game, allPlayers]);
-
+  const { session, currentPlayer, pushNotification } = useApp();
+  const [game, setGame] = useState(null);
+  const [roster, setRoster] = useState([]);
   const [balance, setBalance] = useState(null);
   const [scoreForm, setScoreForm] = useState({ scoreA: "", scoreB: "" });
   const [saved, setSaved] = useState(false);
-
-  const [expenseTotal, setExpenseTotal] = useState(game ? "" : "");
+  const [expenseTotal, setExpenseTotal] = useState("");
   const [paidStatus, setPaidStatus] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [demoFriends, setDemoFriends] = useState([]);
+  const [selectedDemoFriend, setSelectedDemoFriend] = useState("");
+  const [addingDemoFriend, setAddingDemoFriend] = useState(false);
+  const [message, setMessage] = useState("");
 
-  if (!game) {
+  useEffect(() => {
+    let cancelled = false;
+    async function loadGame() {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await api.getGame(session.accessToken, id);
+        if (!cancelled) {
+          setGame(data.game);
+          setRoster(data.participants || []);
+        }
+        if (data.game?.demo) {
+          const friends = await api.getFriends(session.accessToken).catch(() => ({ friends: [] }));
+          if (!cancelled) setDemoFriends((friends.friends || []).filter((item) => item.status === "accepted" && item.player?.demo));
+        }
+      } catch (err) {
+        if (!cancelled) setError(err.message || "Could not load game.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    if (session.accessToken && id) loadGame();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.accessToken, id]);
+
+  const runBalance = async () => {
+    setError("");
+    try {
+      const data = await api.balanceGameTeams(session.accessToken, id, { teamCount: 2 });
+      setBalance(data);
+    } catch (err) {
+      setError(err.message || "Could not balance teams.");
+    }
+  };
+
+  const addDemoFriend = async () => {
+    if (!selectedDemoFriend) return;
+    setAddingDemoFriend(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await api.addDemoTeammate(session.accessToken, id, selectedDemoFriend);
+      const fresh = await api.getGame(session.accessToken, id);
+      setGame(fresh.game);
+      setRoster(fresh.participants || []);
+      setSelectedDemoFriend("");
+      setBalance(null);
+      setMessage(result.message);
+    } catch (err) { setError(err.message || "Could not add demo teammate."); }
+    finally { setAddingDemoFriend(false); }
+  };
+
+  const submitScore = (e) => {
+    e.preventDefault();
+    setSaved(true);
+    pushNotification({ type: "game", text: `Result noted locally for ${game.sport} on ${game.date}: ${scoreForm.scoreA}-${scoreForm.scoreB}.` });
+  };
+
+  if (loading) {
+    return <p className="text-sm text-ink-soft">Loading game...</p>;
+  }
+
+  if (error || !game) {
     return (
       <div>
-        <p className="mb-4">Game not found.</p>
+        <p className="mb-4 text-clay-deep">{error || "Game not found."}</p>
         <GhostButton onClick={() => navigate("/app/games")}>Back to games</GhostButton>
       </div>
     );
   }
 
-  const runBalance = () => setBalance(balanceTeams(roster));
-
-  const submitScore = (e) => {
-    e.preventDefault();
-    setSaved(true);
-    pushNotification({ type: "game", text: `Result recorded for ${game.sport} on ${game.date}: ${scoreForm.scoreA}–${scoreForm.scoreB}.` });
-    recordMatchActivity(game.id);
-  };
-
   const perPerson = expenseTotal && roster.length ? Math.round(Number(expenseTotal) / roster.length) : 0;
-  const togglePaid = (id) => setPaidStatus((s) => ({ ...s, [id]: !s[id] }));
+  const togglePaid = (playerId) => setPaidStatus((s) => ({ ...s, [playerId]: !s[playerId] }));
 
   return (
     <div>
@@ -60,16 +109,19 @@ export default function GameDetail() {
         <div>
           <Badge tone="navy">{game.sport}</Badge>
           <h1 className="font-display text-3xl tracking-wide mt-2">{game.date} · {game.time}</h1>
-          <p className="text-ink-soft">{game.venue} · {roster.length}/{game.capacity} players</p>
+          <p className="text-ink-soft">{game.venueName || `Venue ${game.venueId}`} · {game.participantCount}/{game.capacity} players</p>
+          {game.demo && <p className="text-xs text-ink-soft mt-1">Demo game with fictional players. No real venue time or payment is reserved.</p>}
         </div>
         <Badge tone={game.status === "Full" ? "clay" : "turf"}>{game.status}</Badge>
       </div>
 
+      {message && <p role="status" className="rounded-xl bg-turf-light text-turf-deep p-3 mb-5 text-sm">{message}</p>}
+      {game.demo && game.createdBy === currentPlayer.id && <section className="bg-white rounded-2xl p-5 stitch-border mb-6" aria-labelledby="demo-team-heading"><h2 id="demo-team-heading" className="font-display text-xl">Add a demo teammate</h2><p className="text-sm text-ink-soft mt-1 mb-3">Choose a fictional teammate you added through matchmaking. They appear on this game roster; no real person is invited.</p>{demoFriends.filter((item) => item.player.sports.includes(game.sport) && !roster.some((person) => person.id === item.player.id)).length ? <div className="flex flex-col sm:flex-row gap-2"><label htmlFor="demo-teammate" className="sr-only">Demo teammate</label><select id="demo-teammate" className="fld flex-1" value={selectedDemoFriend} onChange={(event) => setSelectedDemoFriend(event.target.value)}><option value="">Choose a teammate</option>{demoFriends.filter((item) => item.player.sports.includes(game.sport) && !roster.some((person) => person.id === item.player.id)).map((item) => <option key={item.player.id} value={item.player.id}>{item.player.name}</option>)}</select><PrimaryButton type="button" disabled={!selectedDemoFriend || addingDemoFriend} onClick={addDemoFriend}>Add to game</PrimaryButton></div> : <p className="text-sm text-ink-soft">No eligible demo teammates yet. <Link to="/app/matchmaking" className="font-semibold text-turf underline">Find players</Link> or choose another sport.</p>}</section>}
+
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Team balancing */}
         <div className="bg-white rounded-2xl p-6 stitch-border">
           <SectionHeading
-            eyebrow="AI Team Balancer · FR-12"
+            eyebrow="Explainable team balancer"
             title="Balanced teams"
             action={
               <PrimaryButton className="flex items-center gap-1.5 !px-4 !py-2 text-sm" onClick={runBalance}>
@@ -79,7 +131,7 @@ export default function GameDetail() {
           />
           {!balance ? (
             <p className="text-sm text-ink-soft">
-              Uses each player's current rating to split the roster into two evenly matched sides.
+              Uses participant ratings, including illustrative ratings for demo players, then explains the split.
             </p>
           ) : (
             <div>
@@ -88,23 +140,32 @@ export default function GameDetail() {
                 <span>{balance.balanceScore}/100</span>
               </div>
               <ProgressBar value={balance.balanceScore} tone="turf" />
+              <p className="text-xs text-ink-soft mt-2">Rating difference: {balance.ratingDifference}</p>
               <div className="grid grid-cols-2 gap-4 mt-5">
-                <TeamCol title="Team A" tone="turf" team={balance.teamA} sum={balance.sumA} />
-                <TeamCol title="Team B" tone="clay" team={balance.teamB} sum={balance.sumB} />
+                {balance.teams.map((team, index) => (
+                  <TeamCol key={team.name} title={team.name} tone={index === 0 ? "turf" : "clay"} team={team.players} sum={team.totalRating} />
+                ))}
+              </div>
+              <div className="mt-4 bg-paper-dim rounded-xl p-3">
+                <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-2">Why this split</p>
+                <div className="space-y-1">
+                  {balance.reasons.slice(0, 6).map((reason) => (
+                    <p key={reason} className="text-xs text-ink-soft">{reason}</p>
+                  ))}
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Score & performance */}
         <div className="bg-white rounded-2xl p-6 stitch-border">
-          <SectionHeading eyebrow="FR-20 / FR-21" title="Record result" />
+          <SectionHeading eyebrow="Result placeholder" title="Record result" />
           {saved ? (
             <div className="flex items-center gap-3 p-4 rounded-xl bg-turf-light">
               <Trophy className="text-turf" />
               <div>
-                <p className="font-semibold text-sm">Result saved</p>
-                <p className="text-xs text-ink-soft">Player ratings and history have been updated.</p>
+                <p className="font-semibold text-sm">Result noted locally</p>
+                <p className="text-xs text-ink-soft">Match-result persistence arrives in a later phase.</p>
               </div>
             </div>
           ) : (
@@ -119,22 +180,13 @@ export default function GameDetail() {
                   <input required type="number" min="0" className="fld" value={scoreForm.scoreB} onChange={(e) => setScoreForm({ ...scoreForm, scoreB: e.target.value })} />
                 </div>
               </div>
-              <PrimaryButton type="submit" className="w-full">Save result</PrimaryButton>
+              <PrimaryButton type="submit" className="w-full">Save local result</PrimaryButton>
             </form>
           )}
         </div>
 
-        {/* Weather / match-time forecast */}
-        {venue && (
-          <div className="bg-white rounded-2xl p-6 stitch-border lg:col-span-2">
-            <SectionHeading eyebrow="Weather Intelligence · FR-65" title="Match-time forecast" />
-            <MatchForecast lat={venue.lat} lng={venue.lng} date={game.date} />
-          </div>
-        )}
-
-        {/* Expense splitting */}
         <div className="bg-white rounded-2xl p-6 stitch-border lg:col-span-2">
-          <SectionHeading eyebrow="FR-19 · BR-09" title="Split expenses" />
+          <SectionHeading eyebrow="Expense placeholder" title="Split expenses" />
           <div className="flex items-center gap-3 mb-5">
             <span className="text-ink-soft"><IndianRupee size={16} /></span>
             <input
@@ -149,7 +201,7 @@ export default function GameDetail() {
           {expenseTotal && (
             <div>
               <p className="text-sm text-ink-soft mb-3">
-                ₹{Number(expenseTotal).toLocaleString("en-IN")} ÷ {roster.length} players = <strong>₹{perPerson.toLocaleString("en-IN")}</strong> each
+                Rs {Number(expenseTotal).toLocaleString("en-IN")} / {roster.length} players = <strong>Rs {perPerson.toLocaleString("en-IN")}</strong> each
               </p>
               <div className="space-y-2">
                 {roster.map((p) => (
@@ -180,7 +232,7 @@ function TeamCol({ title, tone, team, sum }) {
     <div className={`rounded-xl p-4 ${bg}`}>
       <div className="flex items-center justify-between mb-3">
         <p className={`font-display tracking-wide ${text}`}>{title}</p>
-        <span className="scoreboard text-xs text-ink-soft">Σ {sum}</span>
+        <span className="scoreboard text-xs text-ink-soft">sum {sum}</span>
       </div>
       <div className="space-y-2">
         {team.map((p) => (

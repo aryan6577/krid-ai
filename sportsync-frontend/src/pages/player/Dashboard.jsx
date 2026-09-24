@@ -1,133 +1,75 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Flame, Trophy, Users, MapPinned, Briefcase, ArrowRight } from "lucide-react";
-import { SectionHeading, ScoreboardStat, Badge, PrimaryButton } from "../../components/ui";
+import { ArrowRight, Camera, Flame, MapPin, Play, Sparkles, Trophy } from "lucide-react";
 import { useApp } from "../../context/AppContext";
-import { performanceHistory } from "../../data/players";
-import WeatherChip from "../../components/WeatherChip";
-import WeeklyForecast from "../../components/WeeklyForecast";
+import { api } from "../../lib/api";
+import WeatherWidget from "../../components/WeatherWidget";
+
+const actions = [
+  { to: "/app/games", icon: Play, title: "Join a game", detail: "See who's playing" },
+  { to: "/app/train", icon: Camera, title: "Train with camera", detail: "Track an exercise or drill" },
+  { to: "/app/venues", icon: MapPin, title: "Find a venue", detail: "Choose where to play" },
+  { to: "/app/scholarships", icon: Trophy, title: "Find support", detail: "Funding and opportunities" },
+];
 
 export default function Dashboard() {
-  const { currentPlayer, gamesState, friendPlayers, streak } = useApp();
-  const myGames = gamesState.filter((g) => g.participants.includes(currentPlayer.id));
-  const acceptedFriends = friendPlayers.filter((f) => f.status === "accepted");
-  const recent = performanceHistory.slice(0, 3);
+  const { currentPlayer, session } = useApp();
+  const [data, setData] = useState({ games: [], exercise: [], tutorials: [], sports: [], streak: null });
+  const [weather, setWeather] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const primarySport = currentPlayer.sports?.[0];
 
-  return (
-    <div>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-clay mb-1">Welcome back</p>
-          <h1 className="font-display text-3xl md:text-4xl tracking-wide">{currentPlayer.name.split(" ")[0]}'s Game Day</h1>
-          <p className="text-ink-soft mt-1">{currentPlayer.location} · {currentPlayer.sports.join(" & ")}</p>
-        </div>
-        <div className="flex gap-3 flex-wrap">
-          <ScoreboardStat label="Rating" value={currentPlayer.rating} />
-          <ScoreboardStat label="Streak" value={streak.current} suffix="d" />
-          <ScoreboardStat label="Best Streak" value={streak.longest} suffix="d" />
-        </div>
-      </div>
+  useEffect(() => {
+    if (!session.accessToken) return;
+    let active = true;
+    Promise.allSettled([
+      api.getGames(session.accessToken),
+      api.getExerciseEvaluations(session.accessToken, 3),
+      api.getTutorialEvaluations(session.accessToken, 3),
+      api.getAlternativeSports(session.accessToken, { primarySport, limit: 3 }),
+      api.getStreakMonth(session.accessToken),
+    ]).then(([games, exercise, tutorials, sports, streak]) => {
+      if (!active) return;
+      setData({
+        games: games.status === "fulfilled" ? games.value.games || [] : [],
+        exercise: exercise.status === "fulfilled" ? exercise.value.sessions || [] : [],
+        tutorials: tutorials.status === "fulfilled" ? tutorials.value.sessions || [] : [],
+        sports: sports.status === "fulfilled" ? sports.value.recommendations || [] : [],
+        streak: streak.status === "fulfilled" ? streak.value : null,
+      });
+      if ([games, exercise, tutorials].every((item) => item.status === "rejected")) setError("Your live activity is unavailable right now. You can still explore Play and Scholarships.");
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [session.accessToken, primarySport]);
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-10">
-        <QuickCard to="/app/matchmaking" icon={Users} title="Find compatible players" body="AI-ranked players near you, ready to swipe." tone="turf" />
-        <QuickCard to="/app/venues" icon={MapPinned} title="Book a venue" body="Ranked turfs & courts by distance and cost." tone="clay" />
-        <QuickCard to="/app/games" icon={Trophy} title="Manage your games" body="Join, balance teams and record results." tone="gold" />
-        <QuickCard to="/app/career" icon={Briefcase} title="Explore career opportunities" body="AI-matched trials, scouting & coaching roles." tone="navy" />
-        <QuickCard to="/app/coaching" icon={Flame} title="Train & discover sports" body="Exercise Mode, Tutorial Mode and alternative sports." tone="clayDeep" />
-      </div>
+  useEffect(() => {
+    if (!session.accessToken) return;
+    let active = true;
+    setWeatherLoading(true);
+    api.getWeather(session.accessToken).then((result) => { if (active) setWeather(result.weather); })
+      .catch(() => { if (active) setWeather({ status: "unavailable", location: { label: currentPlayer.location }, message: "Current weather could not be loaded." }); })
+      .finally(() => { if (active) setWeatherLoading(false); });
+    return () => { active = false; };
+  }, [session.accessToken, currentPlayer.location]);
 
-      <div className="bg-white rounded-2xl p-6 stitch-border mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-          <div>
-            <SectionHeading eyebrow="Weather Intelligence · FR-63" title="Your location" />
-            <p className="text-sm text-ink-soft -mt-3">{currentPlayer.location}</p>
-          </div>
-          <WeatherChip lat={currentPlayer.lat} lng={currentPlayer.lng} size="lg" />
-        </div>
-        <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-3">7-day forecast</p>
-        <WeeklyForecast lat={currentPlayer.lat} lng={currentPlayer.lng} days={7} />
-      </div>
+  const joined = data.games.filter((game) => game.joined);
+  const nextGame = joined.sort((a, b) => new Date(a.dateTime || `${a.date}T${a.time}`) - new Date(b.dateTime || `${b.date}T${b.time}`))[0];
+  const recent = [
+    ...data.exercise.map((item) => ({ ...item, type: "Exercise", title: item.exercise?.name || "Training session" })),
+    ...data.tutorials.map((item) => ({ ...item, type: "Drill", title: item.tutorial?.drillName || "Practice session" })),
+  ].sort((a, b) => new Date(b.endAt || 0) - new Date(a.endAt || 0)).slice(0, 3);
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-2xl p-6 stitch-border">
-          <SectionHeading eyebrow="Coming up" title="Your games" />
-          {myGames.length === 0 ? (
-            <p className="text-sm text-ink-soft">No games yet — join or create one to get started.</p>
-          ) : (
-            <div className="space-y-3">
-              {myGames.map((g) => (
-                <div key={g.id} className="flex items-center justify-between p-3 rounded-xl bg-paper-dim">
-                  <div>
-                    <p className="font-semibold text-sm">{g.sport} · {g.venue}</p>
-                    <p className="text-xs text-ink-soft">{g.date} · {g.time} · {g.participants.length}/{g.capacity} players</p>
-                  </div>
-                  <Badge tone={g.status === "Full" ? "clay" : "turf"}>{g.status}</Badge>
-                </div>
-              ))}
-            </div>
-          )}
-          <Link to="/app/games" className="inline-flex items-center gap-1 text-sm font-semibold text-turf mt-4">
-            View all games <ArrowRight size={14} />
-          </Link>
-        </div>
-
-        <div className="bg-white rounded-2xl p-6 stitch-border">
-          <SectionHeading eyebrow="Circle" title="Friends" />
-          <div className="space-y-3">
-            {acceptedFriends.slice(0, 4).map(({ player }) => (
-              <div key={player.id} className="flex items-center gap-3">
-                <span className="w-9 h-9 rounded-full bg-turf-light text-turf-deep font-bold text-xs flex items-center justify-center">
-                  {player.avatar}
-                </span>
-                <div>
-                  <p className="text-sm font-semibold">{player.name}</p>
-                  <p className="text-xs text-ink-soft">{player.sports.join(", ")}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <Link to="/app/friends" className="inline-flex items-center gap-1 text-sm font-semibold text-turf mt-4">
-            Manage friends <ArrowRight size={14} />
-          </Link>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl p-6 stitch-border mt-6">
-        <SectionHeading eyebrow="Form" title="Recent results" />
-        <div className="grid sm:grid-cols-3 gap-4">
-          {recent.map((r) => (
-            <div key={r.gameId} className="p-4 rounded-xl bg-paper-dim">
-              <div className="flex items-center justify-between mb-2">
-                <Badge tone={r.result === "Win" ? "turf" : r.result === "Loss" ? "clay" : "neutral"}>{r.result}</Badge>
-                <span className="scoreboard text-xs text-ink-soft">{r.date}</span>
-              </div>
-              <p className="font-display text-xl tracking-wide">{r.score}</p>
-              <p className="text-xs text-ink-soft mt-1">
-                {r.sport} · {r.ratingDelta > 0 ? "+" : ""}
-                {r.ratingDelta} rating
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function QuickCard({ to, icon: Icon, title, body, tone }) {
-  const tones = {
-    turf: "bg-turf text-white",
-    clay: "bg-clay text-white",
-    gold: "bg-gold text-ink",
-    navy: "bg-turf-deep text-white",
-    clayDeep: "bg-clay-deep text-white",
-  };
-  return (
-    <Link to={to} className={`rounded-2xl p-6 ${tones[tone]} flex flex-col justify-between min-h-[150px] hover:opacity-95 transition`}>
-      <Icon size={26} />
-      <div className="mt-4">
-        <p className="font-display text-lg tracking-wide">{title}</p>
-        <p className="text-sm opacity-80 mt-1">{body}</p>
-      </div>
-    </Link>
-  );
+  return <div className="space-y-6">
+    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"><div><p className="text-xs uppercase tracking-[.2em] font-bold text-clay">Your home ground</p><h1 className="font-display text-4xl md:text-5xl mt-1">Hey {currentPlayer.name?.split(" ")[0] || "Player"}, ready to move?</h1><p className="text-ink-soft mt-2">Pick up where you left off, or find your next game.</p></div><span className="inline-flex items-center gap-2 rounded-full bg-turf-light text-turf-deep px-4 py-2 text-sm font-bold self-start"><Flame size={17} /> {data.streak ? `${data.streak.currentStreak} day streak` : "Streak unavailable"}</span></div>
+    <section className="relative overflow-hidden rounded-3xl bg-turf-deep text-white p-7 md:p-9 grid md:grid-cols-[1fr_auto] gap-6 items-center"><div className="absolute -right-16 -top-20 w-72 h-72 rounded-full border border-white/15" /><div className="relative"><p className="uppercase tracking-[.2em] text-xs text-gold font-bold">Next move</p><h2 className="font-display text-3xl md:text-4xl mt-2">{nextGame ? `You're in for ${nextGame.sport}` : "Find your game"}</h2><p className="text-white/75 mt-2 max-w-xl">{nextGame ? `${nextGame.date || "Upcoming"} ${nextGame.time || ""} · ${nextGame.participantCount || 0}/${nextGame.capacity} players` : "See open games, discover teammates and choose a place to play."}</p></div><Link to={nextGame ? `/app/games/${nextGame.id}` : "/app/play"} className="relative inline-flex items-center justify-center gap-2 bg-clay hover:bg-clay-deep rounded-xl px-6 py-3 font-bold">{nextGame ? "View game" : "Explore Play"}<ArrowRight size={17} /></Link></section>
+    <div className="lg:hidden"><WeatherWidget weather={weather} loading={weatherLoading} title="Weather near you" /></div>
+    {error && <p role="status" className="rounded-xl bg-clay-light px-4 py-3 text-sm text-clay-deep">{error}</p>}
+    <div className="grid lg:grid-cols-[1.5fr_1fr] gap-5"><div className="space-y-5">
+      <section className="rounded-2xl bg-white border border-ink/10 p-6"><div className="flex items-center justify-between gap-4 mb-5"><h2 className="font-display text-2xl">Do something today</h2><Link to="/app/play" className="text-sm font-bold text-turf">All play options →</Link></div><div className="grid sm:grid-cols-2 gap-3">{actions.map(({ to, icon: Icon, title, detail }) => <Link key={to} to={to} className="group flex items-center gap-3 rounded-xl bg-paper-dim hover:bg-turf-light p-4 transition"><span className="w-10 h-10 rounded-lg bg-white text-turf flex items-center justify-center shrink-0"><Icon size={19} /></span><span className="min-w-0 flex-1"><strong className="block text-sm">{title}</strong><span className="text-xs text-ink-soft">{detail}</span></span><ArrowRight size={16} className="text-turf opacity-0 group-hover:opacity-100" /></Link>)}</div></section>
+      <section className="rounded-2xl bg-white border border-ink/10 p-6"><div className="flex items-center justify-between gap-4 mb-4"><h2 className="font-display text-2xl">Recent progress</h2><Link to="/app/performance" className="text-sm font-bold text-turf">View history →</Link></div>{loading ? <p className="text-ink-soft">Loading activity…</p> : recent.length ? <div className="divide-y divide-ink/10">{recent.map((item, index) => <div key={item.id || index} className="flex items-center justify-between gap-4 py-3"><div><p className="font-semibold">{item.title}</p><p className="text-sm text-ink-soft">{item.type} · {item.endAt ? new Date(item.endAt).toLocaleDateString() : "Recent"}</p></div><span className="text-sm font-bold text-turf">{item.completion || "Recorded"}</span></div>)}</div> : <div className="rounded-xl bg-paper-dim p-5"><p className="font-semibold">No sessions yet</p><p className="text-sm text-ink-soft mt-1">Start a camera session to see real progress here.</p><Link to="/app/train" className="inline-flex items-center gap-1 text-sm font-bold text-clay mt-3">Start training <ArrowRight size={15} /></Link></div>}</section>
+    </div><aside className="space-y-5"><div className="hidden lg:block"><WeatherWidget weather={weather} loading={weatherLoading} title="Weather near you" /></div><section className="rounded-2xl bg-white border border-ink/10 p-6"><h2 className="font-display text-2xl">Your sport</h2><p className="text-ink-soft mt-1">{currentPlayer.sports?.join(" · ") || "Add a sport in your profile"}</p><p className="mt-5 text-sm font-bold uppercase tracking-wider text-ink-soft">Worth exploring</p>{data.sports.length ? <div className="mt-2 space-y-3">{data.sports.slice(0, 3).map((sport) => <div key={sport.sport} className="flex items-start gap-3 rounded-xl bg-paper-dim p-3"><Sparkles size={18} className="text-clay shrink-0 mt-1" /><div><p className="font-semibold">{sport.sport}</p><p className="text-xs text-ink-soft">{sport.sharedAttributes?.slice(0, 2).join(" · ") || "Related skills"}</p></div></div>)}</div> : <p className="text-sm text-ink-soft mt-3">Recommendations will appear when your sport profile is available.</p>}<Link to="/app/profile" className="inline-block text-sm font-bold text-turf mt-4">Update sports profile →</Link></section><section className="rounded-2xl bg-gold-light border border-gold/30 p-6"><h2 className="font-display text-2xl">Keep showing up</h2><p className="text-ink-soft mt-2">{data.streak?.today?.eventCount ? `Today counted: ${data.streak.today.types.join(", ")}. Your ${data.streak.currentStreak} day streak is secure today.` : data.streak ? "Today is still open. Complete one exercise target with reliable camera tracking, or explicitly confirm a completed target with limited tracking. One day counts once." : "Streak status is unavailable right now. Open the activity calendar to retry."}</p><Link to="/app/performance" className="inline-block text-sm font-bold text-turf mt-4">See activity calendar →</Link></section></aside></div>
+  </div>;
 }

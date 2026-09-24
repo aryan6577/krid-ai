@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { User, Building2, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { PrimaryButton } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 import { BrandMark, BrandWordmark } from "../../components/Brand";
@@ -8,20 +8,43 @@ import { BrandMark, BrandWordmark } from "../../components/Brand";
 export default function Auth() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { login } = useApp();
+  const { login, register } = useApp();
   const [mode, setMode] = useState(params.get("mode") === "register" ? "register" : "login");
-  const [role, setRole] = useState(params.get("role") === "organisation" ? "organisation" : "player");
-  const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
+  const [form, setForm] = useState({ identifier: "", password: "" });
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const payloadFromForm = () => {
+    const identifier = form.identifier.trim();
+    return identifier.includes("@")
+      ? { email: identifier, password: form.password }
+      : { phone: identifier, password: form.password };
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Demo shortcut: logging in with an organisation demo email lands on the org dashboard,
-    // even without picking a role (login mode has no role selector shown).
-    const demoOrgEmails = ["org@sportsync.ai", "org@krid.ai"];
-    const isOrgDemoLogin = mode === "login" && demoOrgEmails.includes(form.email.trim().toLowerCase());
-    const effectiveRole = isOrgDemoLogin ? "organisation" : role;
-    login(effectiveRole);
-    navigate(mode === "register" ? "/onboarding" : "/app/dashboard");
+    setError("");
+    setStatus("");
+    setSubmitting(true);
+    try {
+      if (mode === "register") {
+        const data = await register(payloadFromForm());
+        if (!data.accessToken) {
+          setStatus("Account created. Confirm your email or phone in Supabase Auth, then log in.");
+          return;
+        }
+        navigate("/onboarding");
+        return;
+      }
+
+      const data = await login(payloadFromForm());
+      navigate(data.profile?.role ? "/app/dashboard" : "/onboarding");
+    } catch (err) {
+      setError(err.message || "Authentication failed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -46,63 +69,19 @@ export default function Auth() {
           ))}
         </div>
 
-        {mode === "register" && (
-          <div className="mb-6">
-            <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-2">I am a...</p>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setRole("player")}
-                className={`rounded-xl p-4 border-2 text-left transition ${
-                  role === "player" ? "border-turf bg-turf-light" : "border-ink/10"
-                }`}
-              >
-                <User className="mb-2 text-turf" size={20} />
-                <p className="font-semibold text-sm">Player</p>
-                <p className="text-xs text-ink-soft">Find games & venues</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setRole("organisation")}
-                className={`rounded-xl p-4 border-2 text-left transition ${
-                  role === "organisation" ? "border-turf bg-turf-light" : "border-ink/10"
-                }`}
-              >
-                <Building2 className="mb-2 text-turf" size={20} />
-                <p className="font-semibold text-sm">Organisation</p>
-                <p className="text-xs text-ink-soft">List venues & fundraise</p>
-              </button>
-            </div>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="space-y-3">
-          {mode === "register" && (
-            <input
-              required
-              placeholder={role === "organisation" ? "Organisation name" : "Full name"}
-              className="w-full px-4 py-2.5 rounded-xl border border-ink/15 bg-white focus:outline-none focus:ring-2 focus:ring-turf text-sm"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-          )}
+          <label htmlFor="auth-identifier" className="block text-sm font-semibold">Email address or phone</label>
           <input
+            id="auth-identifier"
             required
-            type="email"
-            placeholder="Email address"
+            placeholder="Email address or phone"
             className="w-full px-4 py-2.5 rounded-xl border border-ink/15 bg-white focus:outline-none focus:ring-2 focus:ring-turf text-sm"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            value={form.identifier}
+            onChange={(e) => setForm({ ...form, identifier: e.target.value })}
           />
-          {mode === "register" && (
-            <input
-              placeholder="Phone number"
-              className="w-full px-4 py-2.5 rounded-xl border border-ink/15 bg-white focus:outline-none focus:ring-2 focus:ring-turf text-sm"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            />
-          )}
+          <label htmlFor="auth-password" className="block text-sm font-semibold">Password</label>
           <input
+            id="auth-password"
             required
             type="password"
             placeholder="Password"
@@ -111,19 +90,17 @@ export default function Auth() {
             onChange={(e) => setForm({ ...form, password: e.target.value })}
           />
 
-          <PrimaryButton type="submit" className="w-full flex items-center justify-center gap-2 mt-2">
+          {error && <p role="alert" className="text-sm text-clay-deep bg-clay-light rounded-xl px-3 py-2">{error}</p>}
+          {status && <p role="status" className="text-sm text-turf-deep bg-turf-light rounded-xl px-3 py-2">{status}</p>}
+
+          <PrimaryButton type="submit" disabled={submitting} className="w-full flex items-center justify-center gap-2 mt-2">
             {mode === "login" ? "Log in" : "Create account"} <ArrowRight size={16} />
           </PrimaryButton>
         </form>
 
         <p className="text-xs text-ink-soft/70 text-center mt-5">
-          Prototype auth — no real credentials required. Passwords are never stored in this demo.
+          Role selection happens after first login and can only be completed once per account.
         </p>
-        {mode === "login" && (
-          <p className="text-xs text-turf-deep bg-turf-light rounded-lg px-3 py-2 text-center mt-3">
-            Demo tip: log in with <strong>org@sportsync.ai</strong> (any password) to land on the Organisation dashboard.
-          </p>
-        )}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2 } from "lucide-react";
+import { Building2, User } from "lucide-react";
 import { PrimaryButton, GhostButton, Badge } from "../../components/ui";
 import { useApp } from "../../context/AppContext";
 
@@ -9,31 +9,63 @@ const SKILLS = ["Beginner", "Intermediate", "Advanced"];
 const SLOTS = ["Weekday Mornings", "Weekday Evenings", "Sunday Morning", "Weekend Evenings"];
 
 export default function Onboarding() {
-  const { role, completeOnboarding } = useApp();
+  const { completeOnboarding } = useApp();
   const navigate = useNavigate();
+  const [role, setRole] = useState(null);
   const [step, setStep] = useState(0);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const [playerData, setPlayerData] = useState({
+    name: "",
     location: "",
     sports: [],
     skill: {},
     availability: [],
-    preference: "Competitive",
+    preferences: { competitivePreference: "Competitive", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC" },
   });
 
   const [orgData, setOrgData] = useState({
     name: "",
+    contact: { email: "", phone: "" },
     location: "",
     type: "Turf & Court Operator",
-    verify: false,
+    verificationStatus: "Pending",
   });
 
   const toggle = (arr, val) => (arr.includes(val) ? arr.filter((v) => v !== val) : [...arr, val]);
 
-  const finish = () => {
-    completeOnboarding();
-    navigate("/app/dashboard");
+  const finish = async () => {
+    setError("");
+    setSaving(true);
+    try {
+      await completeOnboarding(role, role === "organisation" ? orgData : playerData);
+      navigate("/app/dashboard");
+    } catch (err) {
+      setError(err.message || "Could not complete onboarding.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (!role) {
+    return (
+      <Shell title="Choose your Krid.ai role" step={0} total={1}>
+        <p className="text-sm text-ink-soft mb-5">
+          This choice is permanent for the account. The backend enforces one role per login.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <RoleCard icon={User} title="Player" body="Find games, train, and manage your profile." onClick={() => setRole("player")} />
+          <RoleCard
+            icon={Building2}
+            title="Organisation"
+            body="Manage organisation details and verification status."
+            onClick={() => setRole("organisation")}
+          />
+        </div>
+      </Shell>
+    );
+  }
 
   if (role === "organisation") {
     return (
@@ -64,30 +96,34 @@ export default function Onboarding() {
                 <option>Event Organiser</option>
               </select>
             </Field>
-            <NextRow onNext={() => setStep(1)} disabled={!orgData.name || !orgData.location} />
+            <NextRow onBack={() => setRole(null)} onNext={() => setStep(1)} disabled={!orgData.name || !orgData.location} />
           </div>
         )}
         {step === 1 && (
           <div className="space-y-4">
-            <p className="text-sm text-ink-soft">
-              Only verified organisations can publish turf/venue listings (BR-02). Submit for verification now, or
-              continue and finish later from your dashboard.
-            </p>
-            <button
-              onClick={() => setOrgData({ ...orgData, verify: true })}
-              className={`w-full flex items-center gap-3 rounded-xl border-2 p-4 text-left transition ${
-                orgData.verify ? "border-turf bg-turf-light" : "border-ink/15"
-              }`}
-            >
-              <CheckCircle2 className={orgData.verify ? "text-turf" : "text-ink-soft"} />
-              <div>
-                <p className="font-semibold text-sm">Submit for verification</p>
-                <p className="text-xs text-ink-soft">Email + phone verification workflow (FR-05)</p>
-              </div>
-            </button>
+            <Field label="Contact email">
+              <input
+                className="input"
+                value={orgData.contact.email}
+                onChange={(e) => setOrgData({ ...orgData, contact: { ...orgData.contact, email: e.target.value } })}
+                placeholder="ops@example.com"
+              />
+            </Field>
+            <Field label="Contact phone">
+              <input
+                className="input"
+                value={orgData.contact.phone}
+                onChange={(e) => setOrgData({ ...orgData, contact: { ...orgData.contact, phone: e.target.value } })}
+                placeholder="+91..."
+              />
+            </Field>
+            <p className="text-sm text-ink-soft">Verification status: Pending. An administrator can update it after review.</p>
+            {error && <p className="text-sm text-clay-deep bg-clay-light rounded-xl px-3 py-2">{error}</p>}
             <div className="flex justify-between pt-2">
               <GhostButton onClick={() => setStep(0)}>Back</GhostButton>
-              <PrimaryButton onClick={finish}>Go to dashboard</PrimaryButton>
+              <PrimaryButton onClick={finish} disabled={saving}>
+                Save profile
+              </PrimaryButton>
             </div>
           </div>
         )}
@@ -99,6 +135,14 @@ export default function Onboarding() {
     <Shell title="Set up your player profile" step={step} total={3}>
       {step === 0 && (
         <div className="space-y-4">
+          <Field label="Full name">
+            <input
+              className="input"
+              value={playerData.name}
+              onChange={(e) => setPlayerData({ ...playerData, name: e.target.value })}
+              placeholder="Your name"
+            />
+          </Field>
           <Field label="Your location">
             <input
               className="input"
@@ -116,16 +160,20 @@ export default function Onboarding() {
               ))}
             </div>
           </Field>
-          <NextRow onNext={() => setStep(1)} disabled={!playerData.location || playerData.sports.length === 0} />
+          <NextRow
+            onBack={() => setRole(null)}
+            onNext={() => setStep(1)}
+            disabled={!playerData.name || !playerData.location || playerData.sports.length === 0}
+          />
         </div>
       )}
 
       {step === 1 && (
         <div className="space-y-4">
-          <p className="text-sm text-ink-soft mb-1">Skill level per sport (FR-06)</p>
+          <p className="text-sm text-ink-soft mb-1">Skill level per sport</p>
           {playerData.sports.map((s) => (
             <Field key={s} label={s}>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {SKILLS.map((sk) => (
                   <Chip
                     key={sk}
@@ -144,7 +192,7 @@ export default function Onboarding() {
 
       {step === 2 && (
         <div className="space-y-4">
-          <Field label="When are you usually free? (FR-07)">
+          <Field label="When are you usually free?">
             <div className="flex flex-wrap gap-2">
               {SLOTS.map((s) => (
                 <Chip key={s} active={playerData.availability.includes(s)} onClick={() => setPlayerData({ ...playerData, availability: toggle(playerData.availability, s) })}>
@@ -156,16 +204,21 @@ export default function Onboarding() {
           <Field label="Competitive preference">
             <div className="flex gap-2">
               {["Competitive", "Friendly"].map((p) => (
-                <Chip key={p} active={playerData.preference === p} onClick={() => setPlayerData({ ...playerData, preference: p })}>
+                <Chip
+                  key={p}
+                  active={playerData.preferences.competitivePreference === p}
+                  onClick={() => setPlayerData({ ...playerData, preferences: { ...playerData.preferences, competitivePreference: p } })}
+                >
                   {p}
                 </Chip>
               ))}
             </div>
           </Field>
+          {error && <p className="text-sm text-clay-deep bg-clay-light rounded-xl px-3 py-2">{error}</p>}
           <div className="flex justify-between pt-2">
             <GhostButton onClick={() => setStep(1)}>Back</GhostButton>
-            <PrimaryButton onClick={finish} disabled={playerData.availability.length === 0}>
-              Go to dashboard
+            <PrimaryButton onClick={finish} disabled={saving || playerData.availability.length === 0}>
+              Save profile
             </PrimaryButton>
           </div>
         </div>
@@ -192,12 +245,22 @@ function Shell({ title, step, total, children }) {
   );
 }
 
+function RoleCard({ icon: Icon, title, body, onClick }) {
+  return (
+    <button type="button" onClick={onClick} className="rounded-xl p-5 border-2 border-ink/10 text-left hover:border-turf hover:bg-turf-light transition">
+      <Icon className="mb-3 text-turf" size={22} />
+      <p className="font-semibold text-sm">{title}</p>
+      <p className="text-xs text-ink-soft mt-1">{body}</p>
+    </button>
+  );
+}
+
 function Field({ label, children }) {
   return (
-    <div>
-      <p className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-2">{label}</p>
+    <label className="block">
+      <span className="text-xs font-bold uppercase tracking-widest text-ink-soft mb-2 block">{label}</span>
       {children}
-    </div>
+    </label>
   );
 }
 
